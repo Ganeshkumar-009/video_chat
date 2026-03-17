@@ -3,7 +3,7 @@ import { Search, Phone, Video, LogOut, Send, MoreVertical, Paperclip, Smile } fr
 import io from 'socket.io-client';
 import Peer from 'simple-peer';
 
-const ENDPOINT = 'http://localhost:5000';
+const ENDPOINT = 'https://video-chat-60iy.onrender.com';
 
 export default function Dashboard({ user, onLogout }) {
   const [friends, setFriends] = useState([]);
@@ -129,7 +129,7 @@ export default function Dashboard({ user, onLogout }) {
       return;
     }
     try {
-      const res = await fetch(`http://localhost:5000/api/users/search?query=${query}`);
+      const res = await fetch(`${ENDPOINT}/api/users/search?query=${query}`);
       const data = await res.json();
       setSearchResults(data.filter(u => u.id !== user.id));
     } catch (err) {
