@@ -125,7 +125,7 @@ export default function Login() {
               <div className="space-y-4 fade-in">
                 <div>
                   <label className="block text-gray-300 text-sm font-medium mb-2 ml-1">
-                    Email Address
+                    Username
                   </label>
                   <input
                     type="email"
@@ -133,7 +133,7 @@ export default function Login() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full px-5 py-3.5 bg-white/[0.03] border border-white/[0.08] rounded-xl focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 text-white placeholder-gray-500 transition-all duration-300 outline-none"
-                    placeholder="you@example.com"
+                    placeholder="enter your username"
                   />
                 </div>
 
