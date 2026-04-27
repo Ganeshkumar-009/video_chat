@@ -1,12 +1,12 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import FriendList from '@/components/FriendList';
 import ChatBox from '@/components/ChatBox';
 
 export default function Dashboard() {
   const [user, setUser] = useState<any>(null);
+  const [selectedUser, setSelectedUser] = useState<any>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -52,13 +52,25 @@ export default function Dashboard() {
         </div>
         
         <div className="flex-1 overflow-y-auto custom-scrollbar">
-          <FriendList />
+          <FriendList onSelectUser={setSelectedUser} selectedUserId={selectedUser?.id} />
         </div>
       </aside>
 
       {/* Main Chat Area */}
       <main className="flex-1 flex flex-col relative bg-[radial-gradient(circle_at_center,rgba(120,119,198,0.05)_0%,transparent_70%)]">
-        <ChatBox />
+        {selectedUser ? (
+          <ChatBox recipient={selectedUser} currentUser={user} />
+        ) : (
+          <div className="h-full flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-700">
+            <div className="w-24 h-24 rounded-3xl bg-white/[0.03] border border-white/[0.05] flex items-center justify-center mb-6 shadow-2xl">
+              <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" className="text-purple-500/50"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            </div>
+            <h2 className="text-2xl font-bold text-white mb-2">Private Messaging</h2>
+            <p className="text-gray-500 max-w-sm">
+              Search for a user in the sidebar and click on their name to start a private conversation.
+            </p>
+          </div>
+        )}
       </main>
 
       <style jsx global>{`
