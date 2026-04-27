@@ -73,6 +73,9 @@ class _WebviewScreenState extends State<WebviewScreen> {
       Permission.camera,
       Permission.microphone,
       Permission.notification,
+      Permission.photos,
+      Permission.videos,
+      Permission.audio,
     ].request();
     
     _controller = WebViewController()
