@@ -18,25 +18,64 @@ export default function Dashboard() {
     }
   }, [router]);
 
-  const handleLogout = async () => {
+  const handleLogout = () => {
     localStorage.removeItem('currentUser');
     router.push('/login');
   };
 
-  if (!user) return <div>Loading...</div>;
+  if (!user) return <div className="h-screen bg-[#0a0a0b] flex items-center justify-center text-purple-500">Loading...</div>;
 
   return (
-    <div className="flex h-screen bg-gray-100">
-      <aside className="w-80 bg-white border-r p-4">
-        <h1 className="text-2xl font-bold mb-4">{user?.username || 'User'}</h1>
-        <button onClick={handleLogout} className="w-full p-2 bg-red-500 text-white rounded mb-4">
-          Logout
-        </button>
-        <FriendList />
+    <div className="flex h-screen bg-[#0a0a0b] text-gray-100 overflow-hidden font-sans">
+      {/* Sidebar */}
+      <aside className="w-80 bg-white/[0.02] border-r border-white/[0.05] backdrop-blur-xl flex flex-col">
+        <div className="p-6 border-b border-white/[0.05] flex items-center justify-between bg-gradient-to-b from-white/[0.02] to-transparent">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-purple-600 to-violet-600 flex items-center justify-center font-bold text-white shadow-lg shadow-purple-500/20">
+              {user?.username?.[0]?.toUpperCase() || 'U'}
+            </div>
+            <div>
+              <h1 className="font-bold text-white truncate max-w-[120px]">{user?.username}</h1>
+              <div className="flex items-center gap-1.5">
+                <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]"></div>
+                <span className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold">Online</span>
+              </div>
+            </div>
+          </div>
+          <button 
+            onClick={handleLogout} 
+            className="p-2.5 rounded-xl bg-white/[0.03] hover:bg-red-500/10 text-gray-400 hover:text-red-400 border border-white/[0.05] hover:border-red-500/20 transition-all duration-300 group"
+            title="Logout"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="group-hover:translate-x-0.5 transition-transform"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          </button>
+        </div>
+        
+        <div className="flex-1 overflow-y-auto custom-scrollbar">
+          <FriendList />
+        </div>
       </aside>
-      <main className="flex-1 p-4">
+
+      {/* Main Chat Area */}
+      <main className="flex-1 flex flex-col relative bg-[radial-gradient(circle_at_center,rgba(120,119,198,0.05)_0%,transparent_70%)]">
         <ChatBox />
       </main>
+
+      <style jsx global>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.05);
+          border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: rgba(255, 255, 255, 0.1);
+        }
+      `}</style>
     </div>
   );
 }
