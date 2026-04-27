@@ -144,7 +144,7 @@ class _WebviewScreenState extends State<WebviewScreen> {
       fullScreenIntent: true,
       styleInformation: BigTextStyleInformation(''),
     );
-    await flutterLocalNotificationsPlugin.show(0, 'New Message', text, const NotificationDetails(android: androidPlatformChannelSpecifics));
+    await flutterLocalNotificationsPlugin.show(0, 'WeChat', text, const NotificationDetails(android: androidPlatformChannelSpecifics));
   }
 
   @override

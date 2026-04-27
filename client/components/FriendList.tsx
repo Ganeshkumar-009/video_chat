@@ -59,8 +59,8 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
           if (otherId && otherId !== cId && otherId !== 'undefined') {
             participantIds.add(otherId);
             
-            // Only count if you are the receiver AND it's not read yet
-            if (rId === cId && m.is_read !== true) {
+            // Count if you are the receiver AND it's not read
+            if (rId === cId && (m.is_read === false || m.is_read === null)) {
               unreads[otherId] = (unreads[otherId] || 0) + 1;
             }
           }
