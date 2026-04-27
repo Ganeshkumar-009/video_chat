@@ -34,7 +34,7 @@ export default function Dashboard() {
           if (String(newMsg.receiver_id) === String(parsedUser.id)) {
             // Trigger Flutter Notification
             if ((window as any).NotificationChannel) {
-              (window as any).NotificationChannel.postMessage(`${newMsg.sender_username}: ${newMsg.text}`);
+              (window as any).NotificationChannel.postMessage(`${newMsg.sender_username}: ${newMsg.content}`);
             }
           }
         })

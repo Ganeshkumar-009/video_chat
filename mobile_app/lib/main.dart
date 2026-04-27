@@ -115,6 +115,8 @@ class _WebviewScreenState extends State<WebviewScreen> {
             ledOffMs: 500,
             enableLights: true,
             enableVibration: true,
+            visibility: NotificationVisibility.public,
+            fullScreenIntent: true,
             styleInformation: BigTextStyleInformation(''), // Allows long messages
         );
     const NotificationDetails platformChannelSpecifics = NotificationDetails(android: androidPlatformChannelSpecifics);
