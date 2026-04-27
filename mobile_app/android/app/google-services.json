@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "800175844297",
+    "project_id": "wechat-aa713",
+    "storage_bucket": "wechat-aa713.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:800175844297:android:49e023d5ce209b3280d618",
+        "android_client_info": {
+          "package_name": "com.ganesh.videochat.video_chat_mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCMw6ezaj-KF7ix8DJ-o2C8cERbzK287bc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

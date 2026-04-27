@@ -46,7 +46,12 @@ export default function Dashboard() {
         })
         .subscribe();
 
-      // 3. Set Offline on Close
+      // 3. Expose FCM Token Setter for Flutter
+      (window as any).setFCMToken = async (token: string) => {
+        await supabase.from('users').update({ fcm_token: token }).eq('id', parsedUser.id);
+      };
+
+      // 4. Set Offline on Close
       const handleTabClose = () => {
         supabase.from('users').update({ status: 'offline', last_seen: new Date().toISOString() }).eq('id', parsedUser.id).then();
       };

@@ -5,11 +5,20 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   
   const AndroidNotificationChannel channel = AndroidNotificationChannel(
     'high_importance_channel',
@@ -84,7 +93,13 @@ class _WebviewScreenState extends State<WebviewScreen> {
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (String url) => setState(() => _isLoading = true),
-          onPageFinished: (String url) => setState(() => _isLoading = false),
+          onPageFinished: (String url) async {
+            setState(() => _isLoading = false);
+            final token = await FirebaseMessaging.instance.getToken();
+            if (token != null) {
+              controller.runJavaScript("if (window.setFCMToken) { window.setFCMToken('$token'); }");
+            }
+          },
         ),
       )
       ..addJavaScriptChannel(
