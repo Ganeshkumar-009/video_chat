@@ -14,7 +14,39 @@ export default function Dashboard() {
     if (!storedUser) {
       router.push('/login');
     } else {
-      setUser(JSON.parse(storedUser));
+      const parsedUser = JSON.parse(storedUser);
+      setUser(parsedUser);
+      
+      // 1. Mark as Online
+      supabase.from('users').update({ status: 'online' }).eq('id', parsedUser.id).then();
+
+      // 2. Setup Global Message Listener for Notifications
+      const channel = supabase
+        .channel('global-notifications')
+        .on('postgres_changes', { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'messages',
+          filter: `receiver_id=eq.${parsedUser.id}` 
+        }, (payload) => {
+          const newMsg = payload.new;
+          // Trigger Flutter Notification if available
+          if ((window as any).NotificationChannel) {
+            (window as any).NotificationChannel.postMessage(`${newMsg.sender_username}: ${newMsg.content}`);
+          }
+        })
+        .subscribe();
+
+      // 3. Set Offline on Close
+      const handleTabClose = () => {
+        supabase.from('users').update({ status: 'offline' }).eq('id', parsedUser.id).then();
+      };
+      window.addEventListener('beforeunload', handleTabClose);
+
+      return () => {
+        supabase.removeChannel(channel);
+        window.removeEventListener('beforeunload', handleTabClose);
+      };
     }
   }, [router]);
 

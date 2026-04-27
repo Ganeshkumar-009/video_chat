@@ -12,11 +12,14 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
   const [recentUsers, setRecentUsers] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
     const storedUser = localStorage.getItem('currentUser');
+    let curr: any = null;
     if (storedUser) {
-      setCurrentUser(JSON.parse(storedUser));
+      curr = JSON.parse(storedUser);
+      setCurrentUser(curr);
     }
 
     const fetchData = async () => {
@@ -25,19 +28,25 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
       const usersList = usersData || [];
       setAllUsers(usersList);
 
-      // 2. Fetch recent chat participants from messages table
-      if (storedUser) {
-        const curr = JSON.parse(storedUser);
+      // 2. Fetch recent chat participants
+      if (curr) {
         const { data: msgData } = await supabase
           .from('messages')
-          .select('sender_id, receiver_id')
-          .or(`sender_id.eq.${curr.id},receiver_id.eq.${curr.id}`);
+          .select('sender_id, receiver_id, content, created_at')
+          .or(`sender_id.eq.${curr.id},receiver_id.eq.${curr.id}`)
+          .order('created_at', { ascending: false });
 
         if (msgData) {
           const participantIds = new Set();
+          const unreads: Record<string, number> = {};
+          
           msgData.forEach((m: any) => {
-            if (m.sender_id !== curr.id) participantIds.add(m.sender_id);
-            if (m.receiver_id !== curr.id) participantIds.add(m.receiver_id);
+            const otherId = m.sender_id === curr.id ? m.receiver_id : m.sender_id;
+            participantIds.add(otherId);
+            
+            // Mock unread logic (since we don't have is_read column yet, 
+            // we'll count messages from others received in the last hour as a demo)
+            // Ideally this would check an 'is_read' boolean column.
           });
 
           const recents = usersList.filter(u => participantIds.has(u.id));
@@ -46,6 +55,20 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
       }
     };
     fetchData();
+
+    // 3. Real-time Status Listener
+    const statusChannel = supabase
+      .channel('user-status-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, (payload) => {
+        const updatedUser = payload.new as any;
+        setAllUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
+        setRecentUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(statusChannel);
+    };
   }, []);
 
   const filteredSearch = search.trim() === '' 
@@ -63,8 +86,7 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
           placeholder="Search for people..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={(e) => { if(e.key === 'Enter') setSearch(search); }}
-          className="w-full pl-10 pr-4 py-2.5 bg-white/[0.03] border border-white/[0.05] rounded-xl focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/30 text-sm text-white placeholder-gray-500 transition-all duration-300 outline-none"
+          className="w-full pl-10 pr-4 py-2.5 bg-white/[0.03] border border-white/[0.05] rounded-xl focus:ring-2 focus:ring-purple-500/30 text-sm text-white placeholder-gray-500 outline-none"
         />
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-purple-400 transition-colors"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
       </div>
@@ -80,6 +102,7 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
                 user={user} 
                 isSelected={selectedUserId === user.id} 
                 onClick={() => { onSelectUser(user); setSearch(''); }} 
+                unreadCount={0}
               />
             ))}
             {filteredSearch.length === 0 && (
@@ -98,6 +121,7 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
                   user={user} 
                   isSelected={selectedUserId === user.id} 
                   onClick={() => onSelectUser(user)} 
+                  unreadCount={0} // To be connected to real data
                 />
               ))
             ) : (
@@ -113,7 +137,7 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
   );
 }
 
-function UserItem({ user, isSelected, onClick }: { user: any, isSelected: boolean, onClick: () => void }) {
+function UserItem({ user, isSelected, onClick, unreadCount }: { user: any, isSelected: boolean, onClick: () => void, unreadCount: number }) {
   return (
     <div 
       onClick={onClick}
@@ -129,7 +153,7 @@ function UserItem({ user, isSelected, onClick }: { user: any, isSelected: boolea
         }`}>
           {user.username?.[0]?.toUpperCase()}
         </div>
-        <div className={`absolute bottom-0 right-1 w-3.5 h-3.5 border-[3px] border-[#0a0a0b] rounded-full ${user.status === 'online' ? 'bg-green-500' : 'bg-gray-600'}`}></div>
+        <div className={`absolute bottom-0 right-1 w-3.5 h-3.5 border-[3px] border-[#0a0a0b] rounded-full ${user.status === 'online' ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-gray-600'}`}></div>
       </div>
 
       <div className="flex-1 min-w-0">
@@ -137,12 +161,17 @@ function UserItem({ user, isSelected, onClick }: { user: any, isSelected: boolea
           <div className={`text-[16px] font-bold truncate transition-colors ${isSelected ? 'text-white' : 'text-gray-100 group-hover:text-white'}`}>
             {user.username}
           </div>
-          <span className="text-[11px] text-gray-500 font-medium">Just now</span>
+          <span className={`text-[11px] font-medium ${unreadCount > 0 ? 'text-green-500' : 'text-gray-500'}`}>Just now</span>
         </div>
         <div className="flex items-center justify-between">
           <div className={`text-[13px] truncate ${isSelected ? 'text-purple-300/70' : 'text-gray-500 group-hover:text-gray-400'}`}>
             {user.status === 'online' ? 'Active now' : 'Last seen recently'}
           </div>
+          {unreadCount > 0 && (
+            <div className="bg-green-500 text-[#0a0a0b] text-[11px] font-black min-w-[20px] h-5 px-1.5 rounded-full flex items-center justify-center shadow-lg shadow-green-500/20">
+              {unreadCount}
+            </div>
+          )}
         </div>
       </div>
     </div>
