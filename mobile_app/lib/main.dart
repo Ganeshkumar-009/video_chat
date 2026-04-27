@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-// #docregion platform_imports
-// Import for Android features.
 import 'package:webview_flutter_android/webview_flutter_android.dart';
-// #enddocregion platform_imports
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
@@ -15,7 +14,6 @@ void main() async {
   const AndroidNotificationChannel channel = AndroidNotificationChannel(
     'high_importance_channel',
     'High Importance Notifications',
-    description: 'This channel is used for important chat notifications.',
     importance: Importance.max,
     enableVibration: true,
     playSound: true,
@@ -95,20 +93,42 @@ class _WebviewScreenState extends State<WebviewScreen> {
       )
       ..loadRequest(Uri.parse('https://video-chat-1-t2xb.onrender.com/'));
 
-    // #docregion platform_features
     if (controller.platform is AndroidWebViewController) {
       AndroidWebViewController.enableDebugging(true);
-      (controller.platform as AndroidWebViewController)
-          .setMediaPlaybackRequiresUserGesture(false);
+      (controller.platform as AndroidWebViewController).setMediaPlaybackRequiresUserGesture(false);
           
-      // THIS IS THE FIX FOR THE PAPERCLIP
+      // THE NATIVE BRIDGE FOR CAMERA, GALLERY, AND FILES
       (controller.platform as AndroidWebViewController).setOnShowFileSelector(
         (FileSelectorParams params) async {
-          return []; // This triggers the native file picker
+          final ImagePicker picker = ImagePicker();
+          
+          // 1. Handle CAMERA
+          if (params.acceptTypes.contains("image/*") && params.isCaptureEnabled) {
+            final XFile? photo = await picker.pickImage(source: ImageSource.camera);
+            return photo != null ? [Uri.file(photo.path).toString()] : [];
+          }
+          
+          // 2. Handle GALLERY (Images/Videos)
+          if (params.acceptTypes.any((type) => type.contains('image') || type.contains('video'))) {
+            if (params.acceptTypes.contains('video/*')) {
+              final XFile? video = await picker.pickVideo(source: ImageSource.gallery);
+              return video != null ? [Uri.file(video.path).toString()] : [];
+            } else {
+              final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+              return image != null ? [Uri.file(image.path).toString()] : [];
+            }
+          }
+          
+          // 3. Handle DOCUMENTS
+          FilePickerResult? result = await FilePicker.platform.pickFiles();
+          if (result != null && result.files.single.path != null) {
+            return [Uri.file(result.files.single.path!).toString()];
+          }
+          
+          return [];
         },
       );
     }
-    // #enddocregion platform_features
 
     _controller = controller;
   }
