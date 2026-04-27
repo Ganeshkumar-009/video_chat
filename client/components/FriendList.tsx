@@ -56,7 +56,8 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
       );
 
   return (
-    <div className="p-4 space-y-6">
+    <div className="flex flex-col h-full">
+      <div className="p-4">
       <div className="relative group">
         <input
           placeholder="Search for people..."
@@ -67,49 +68,44 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
         />
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-purple-400 transition-colors"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
       </div>
+    </div>
 
-      <div className="space-y-6">
+      <div className="flex-1 overflow-y-auto">
         {/* Search Results Section */}
         {search.trim() !== '' && (
-          <div className="space-y-1 animate-in fade-in slide-in-from-top-2 duration-300">
-            <h3 className="px-2 pb-2 text-[10px] font-bold text-purple-400 uppercase tracking-[0.2em]">Search Results</h3>
-            <div className="space-y-1">
-              {filteredSearch.map((user: any) => (
-                <UserItem 
-                  key={user.id} 
-                  user={user} 
-                  isSelected={selectedUserId === user.id} 
-                  onClick={() => { onSelectUser(user); setSearch(''); }} 
-                />
-              ))}
-              {filteredSearch.length === 0 && (
-                <p className="text-[10px] text-gray-600 px-2 italic">No matches found</p>
-              )}
-            </div>
+          <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+            {filteredSearch.map((user: any) => (
+              <UserItem 
+                key={user.id} 
+                user={user} 
+                isSelected={selectedUserId === user.id} 
+                onClick={() => { onSelectUser(user); setSearch(''); }} 
+              />
+            ))}
+            {filteredSearch.length === 0 && (
+              <p className="text-[11px] text-gray-600 px-4 py-4 italic">No matches found</p>
+            )}
           </div>
         )}
 
         {/* Recent Chats Section */}
         {search.trim() === '' && (
-          <div className="space-y-1">
-            <h3 className="px-2 pb-2 text-[10px] font-bold text-gray-500 uppercase tracking-[0.2em]">Recent Messages</h3>
-            <div className="space-y-1">
-              {recentUsers.length > 0 ? (
-                recentUsers.map((user: any) => (
-                  <UserItem 
-                    key={user.id} 
-                    user={user} 
-                    isSelected={selectedUserId === user.id} 
-                    onClick={() => onSelectUser(user)} 
-                  />
-                ))
-              ) : (
-                <div className="py-12 flex flex-col items-center justify-center opacity-20">
-                   <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" className="mb-3 text-purple-400"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                   <p className="text-[10px] font-bold tracking-widest text-center px-4 uppercase">No conversations yet</p>
-                </div>
-              )}
-            </div>
+          <div>
+            {recentUsers.length > 0 ? (
+              recentUsers.map((user: any) => (
+                <UserItem 
+                  key={user.id} 
+                  user={user} 
+                  isSelected={selectedUserId === user.id} 
+                  onClick={() => onSelectUser(user)} 
+                />
+              ))
+            ) : (
+              <div className="py-20 flex flex-col items-center justify-center opacity-20 px-10">
+                 <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" className="mb-4 text-purple-400"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                 <p className="text-[12px] font-bold tracking-widest text-center uppercase">Start a new conversation</p>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -121,25 +117,33 @@ function UserItem({ user, isSelected, onClick }: { user: any, isSelected: boolea
   return (
     <div 
       onClick={onClick}
-      className={`group p-3 border border-transparent rounded-2xl cursor-pointer flex items-center gap-3 transition-all duration-200 ${
+      className={`group px-4 py-3 flex items-center gap-4 cursor-pointer transition-all duration-200 border-b border-white/[0.03] ${
         isSelected 
-          ? 'bg-purple-600/10 border-purple-500/20' 
-          : 'hover:bg-white/[0.03]'
+          ? 'bg-purple-600/10' 
+          : 'hover:bg-white/[0.02]'
       }`}
     >
-      <div className="relative">
-        <div className={`w-10 h-10 rounded-full bg-white/[0.05] border flex items-center justify-center text-xs font-bold transition-colors ${
-          isSelected ? 'border-purple-500/30 text-purple-400' : 'border-white/[0.1] text-gray-400 group-hover:text-purple-400'
+      <div className="relative flex-shrink-0">
+        <div className={`w-14 h-14 rounded-full bg-gradient-to-br from-purple-600/20 to-blue-600/20 border flex items-center justify-center text-lg font-bold transition-all duration-300 ${
+          isSelected ? 'border-purple-500 shadow-lg shadow-purple-500/20 text-purple-400' : 'border-white/[0.1] text-gray-400 group-hover:border-purple-500/50 group-hover:text-purple-400'
         }`}>
           {user.username?.[0]?.toUpperCase()}
         </div>
-        <div className={`absolute bottom-0 right-0 w-3 h-3 border-2 border-[#0a0a0b] rounded-full ${user.status === 'online' ? 'bg-green-500' : 'bg-gray-600'}`}></div>
+        <div className={`absolute bottom-0 right-1 w-3.5 h-3.5 border-[3px] border-[#0a0a0b] rounded-full ${user.status === 'online' ? 'bg-green-500' : 'bg-gray-600'}`}></div>
       </div>
-      <div>
-        <div className={`text-sm font-semibold transition-colors ${isSelected ? 'text-white' : 'text-gray-200 group-hover:text-white'}`}>
-          {user.username}
+
+      <div className="flex-1 min-w-0">
+        <div className="flex justify-between items-baseline mb-0.5">
+          <div className={`text-[16px] font-bold truncate transition-colors ${isSelected ? 'text-white' : 'text-gray-100 group-hover:text-white'}`}>
+            {user.username}
+          </div>
+          <span className="text-[11px] text-gray-500 font-medium">Just now</span>
         </div>
-        <div className="text-[10px] text-gray-500 font-medium uppercase tracking-tighter">{user.status || 'Offline'}</div>
+        <div className="flex items-center justify-between">
+          <div className={`text-[13px] truncate ${isSelected ? 'text-purple-300/70' : 'text-gray-500 group-hover:text-gray-400'}`}>
+            {user.status === 'online' ? 'Active now' : 'Last seen recently'}
+          </div>
+        </div>
       </div>
     </div>
   );

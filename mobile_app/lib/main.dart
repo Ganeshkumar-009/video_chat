@@ -54,14 +54,17 @@ class _WebviewScreenState extends State<WebviewScreen> {
           },
           onWebResourceError: (WebResourceError error) {
             debugPrint('WebView error: ${error.description}');
+            // If we get a cache miss, try to reload once
+            if (error.description.contains('ERR_CACHE_MISS')) {
+              _controller.reload();
+            }
           },
         ),
       )
-      ..loadRequest(Uri.parse('https://video-chat-1-t2xb.onrender.com/login'));
+      ..loadRequest(Uri.parse('https://video-chat-1-t2xb.onrender.com/'));
   }
 
   Future<void> _requestPermissions() async {
-    // Request Camera and Microphone permissions for Video Chat
     await [
       Permission.camera,
       Permission.microphone,
