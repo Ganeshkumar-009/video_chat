@@ -1,12 +1,13 @@
 {
   "name": "video-chat-frontend",
-  "version": "0.1.1",
+  "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "export": "next build && next export"
   },
   "dependencies": {
     "next": "14.0.0",
@@ -15,13 +16,12 @@
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
-"@supabase/supabase-js": "^2.45.0",
+    "@supabase/supabase-js": "^2.45.0",
     "socket.io-client": "^4.7.5",
     "react-hot-toast": "^2.4.1",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
-    "tailwind-merge": "^2.2.1",
-    "tailwindcss-animate": "^1.0.7"
+    "tailwind-merge": "^2.2.1"
   },
   "devDependencies": {
     "autoprefixer": "^10.0.1",
@@ -32,4 +32,3 @@
     "typescript": "^5"
   }
 }
-
