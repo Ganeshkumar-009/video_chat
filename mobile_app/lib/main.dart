@@ -95,9 +95,14 @@ class _WebviewScreenState extends State<WebviewScreen> {
   }
 
   Future<void> _requestPermissions() async {
-    // On Android 13+, we must request permission.notification explicitly
+    // Check if permission is already granted
     var status = await Permission.notification.status;
-    if (status.isDenied) {
+    
+    if (status.isPermanentlyDenied) {
+      // If the user denied it forever, take them to settings
+      await openAppSettings();
+    } else if (status.isDenied) {
+      // If it's the first time or they just denied it once, ask again
       await Permission.notification.request();
     }
     

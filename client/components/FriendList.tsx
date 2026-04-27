@@ -59,7 +59,7 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
             participantIds.add(otherId);
             
             // Only count if you are the receiver AND it's not read yet
-            if (rId === cId && m.is_read === false) {
+            if (rId === cId && m.is_read !== true) {
               unreads[otherId] = (unreads[otherId] || 0) + 1;
             }
           }
@@ -90,6 +90,7 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
         const newMsg = payload.new as any;
         // If YOU are the receiver, increment unread count
         if (String(newMsg.receiver_id) === String(curr?.id)) {
+          toast(`New message from ${newMsg.sender_username}`, { icon: '💬' });
           setUnreadCounts(prev => ({
             ...prev,
             [String(newMsg.sender_id)]: (prev[String(newMsg.sender_id)] || 0) + 1
