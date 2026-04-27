@@ -21,19 +21,21 @@ export default function Dashboard() {
       // 1. Mark as Online
       supabase.from('users').update({ status: 'online' }).eq('id', parsedUser.id).then();
 
-      // 2. Setup Global Message Listener for Notifications
+      // 2. Setup Global Message Listener for Notifications (Super Reliable)
       const channel = supabase
-        .channel('global-notifications')
+        .channel('global-chat-events')
         .on('postgres_changes', { 
           event: 'INSERT', 
           schema: 'public', 
-          table: 'messages',
-          filter: `receiver_id=eq.${parsedUser.id}` 
+          table: 'messages'
         }, (payload) => {
           const newMsg = payload.new;
-          // Trigger Flutter Notification if available
-          if ((window as any).NotificationChannel) {
-            (window as any).NotificationChannel.postMessage(`${newMsg.sender_username}: ${newMsg.content}`);
+          // Only notify if YOU are the receiver
+          if (String(newMsg.receiver_id) === String(parsedUser.id)) {
+            // Trigger Flutter Notification
+            if ((window as any).NotificationChannel) {
+              (window as any).NotificationChannel.postMessage(`${newMsg.sender_username}: ${newMsg.content}`);
+            }
           }
         })
         .subscribe();

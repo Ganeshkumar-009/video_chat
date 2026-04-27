@@ -78,13 +78,23 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
     };
     fetchData();
 
-    // 3. Real-time Status Listener
+    // 3. Real-time Status & Unread Listener
     const statusChannel = supabase
-      .channel('user-status-changes')
+      .channel('user-events')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, (payload) => {
         const updatedUser = payload.new as any;
         setAllUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
         setRecentUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
+        const newMsg = payload.new as any;
+        // If YOU are the receiver, increment unread count
+        if (String(newMsg.receiver_id) === String(curr?.id)) {
+          setUnreadCounts(prev => ({
+            ...prev,
+            [String(newMsg.sender_id)]: (prev[String(newMsg.sender_id)] || 0) + 1
+          }));
+        }
       })
       .subscribe();
 
