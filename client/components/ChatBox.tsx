@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 import { supabase } from '@/lib/supabase';
+import toast from 'react-hot-toast';
 
 interface ChatBoxProps {
   recipient: any;
