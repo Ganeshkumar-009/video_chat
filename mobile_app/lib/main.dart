@@ -44,7 +44,6 @@ class WebviewScreen extends StatefulWidget {
 class _WebviewScreenState extends State<WebviewScreen> {
   late final WebViewController _controller;
   bool _isLoading = true;
-  bool _showNotifyPrompt = false;
 
   @override
   void initState() {
@@ -53,14 +52,12 @@ class _WebviewScreenState extends State<WebviewScreen> {
   }
 
   Future<void> _initApp() async {
-    // Check notification status
-    var status = await Permission.notification.status;
-    if (!status.isGranted) {
-      setState(() => _showNotifyPrompt = true);
-    }
-    
-    // Request other basic permissions
-    await [Permission.camera, Permission.microphone].request();
+    // REQUEST ALL PERMISSIONS AT ONCE (Camera, Mic, Notifications)
+    await [
+      Permission.camera,
+      Permission.microphone,
+      Permission.notification,
+    ].request();
     
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
@@ -106,68 +103,6 @@ class _WebviewScreenState extends State<WebviewScreen> {
             if (_isLoading)
               const Center(
                 child: CircularProgressIndicator(color: Colors.purple),
-              ),
-            // THE SMART NOTIFICATION PROMPT
-            if (_showNotifyPrompt)
-              Positioned(
-                bottom: 20,
-                left: 20,
-                right: 20,
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF161618),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.purple.withOpacity(0.3)),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.5),
-                        blurRadius: 20,
-                        offset: const Offset(0, 10),
-                      )
-                    ],
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text(
-                        "Enable Notifications",
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        "To get messages instantly, please allow notifications for this app.",
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey, fontSize: 13),
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextButton(
-                              onPressed: () => setState(() => _showNotifyPrompt = false),
-                              child: const Text("Maybe Later", style: TextStyle(color: Colors.grey)),
-                            ),
-                          ),
-                          Expanded(
-                            child: ElevatedButton(
-                              onPressed: () async {
-                                await openAppSettings();
-                                setState(() => _showNotifyPrompt = false);
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.purple,
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              ),
-                              child: const Text("Allow Now"),
-                            ),
-                          ),
-                        ],
-                      )
-                    ],
-                  ),
-                ),
               ),
           ],
         ),
