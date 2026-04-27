@@ -18,8 +18,20 @@ export default function Login() {
     setLoading(true);
     
     try {
+      // 1. First, find the email associated with this username
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('email')
+        .eq('displayName', email) // 'email' state now holds the username
+        .single();
+
+      if (profileError || !profile) {
+        throw new Error('Username not found');
+      }
+
+      // 2. Sign in using the retrieved email
       const { error } = await supabase.auth.signInWithPassword({
-        email,
+        email: profile.email,
         password,
       });
 
