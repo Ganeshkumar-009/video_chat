@@ -61,7 +61,7 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
         <input
           placeholder="Search for people..."
           value={search}
-          onChange={(e) => setSearch(setSearch.trim() === '' ? '' : e.target.value)}
+          onChange={(e) => setSearch(e.target.value)}
           onKeyDown={(e) => { if(e.key === 'Enter') setSearch(search); }}
           className="w-full pl-10 pr-4 py-2.5 bg-white/[0.03] border border-white/[0.05] rounded-xl focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/30 text-sm text-white placeholder-gray-500 transition-all duration-300 outline-none"
         />
