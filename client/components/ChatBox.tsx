@@ -115,7 +115,8 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
         sender_id: currentUser.id,
         sender_username: currentUser.username,
         content: message,
-        receiver_id: recipient.id
+        receiver_id: recipient.id,
+        is_read: false
       }]);
 
     if (error) {
@@ -280,25 +281,37 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
               { label: 'Document', color: 'bg-indigo-500', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z', accept: ".pdf,.doc,.docx,.txt,.zip" },
               { label: 'Camera', color: 'bg-pink-500', icon: 'M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z', accept: "image/*", capture: "environment" },
               { label: 'Gallery', color: 'bg-purple-500', icon: 'm22 13-1.29-1.29a2.41 2.41 0 0 0-3.42 0L12 17l-3.3-3.3a2.41 2.41 0 0 0-3.41 0L2 17', accept: "image/*,video/*" },
-              { label: 'Audio', color: 'bg-orange-500', icon: 'M9 18V5l12-2v13', accept: "audio/*" },
-              { label: 'Location', color: 'bg-green-500', icon: 'M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z', accept: "*" },
-              { label: 'Contact', color: 'bg-blue-500', icon: 'M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2', accept: "*" },
+              { label: 'Audio', color: 'bg-orange-500', icon: 'M9 18V5l12-2v13', action: "toast" },
+              { label: 'Location', color: 'bg-green-500', icon: 'M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z', action: "toast" },
+              { label: 'Contact', color: 'bg-blue-500', icon: 'M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2', action: "toast" },
             ].map((item: any, idx) => (
-              <label key={idx} className="flex flex-col items-center gap-2 cursor-pointer group">
+              <label 
+                key={idx} 
+                className="flex flex-col items-center gap-2 cursor-pointer group"
+                onClick={(e) => {
+                  if (item.action === 'toast') {
+                    e.preventDefault();
+                    toast(`${item.label} sharing coming soon!`);
+                    setIsAttachmentMenuOpen(false);
+                  }
+                }}
+              >
                 <div className={`w-12 h-12 ${item.color} rounded-full flex items-center justify-center text-white shadow-lg group-active:scale-90 transition-transform`}>
                   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d={item.icon}/></svg>
                 </div>
                 <span className="text-[10px] text-gray-400 font-medium">{item.label}</span>
-                <input 
-                  type="file" 
-                  className="hidden" 
-                  accept={item.accept} 
-                  capture={item.capture}
-                  onChange={(e) => {
-                    handleFileUpload(e);
-                    setIsAttachmentMenuOpen(false);
-                  }} 
-                />
+                {item.action !== 'toast' && (
+                  <input 
+                    type="file" 
+                    className="hidden" 
+                    accept={item.accept} 
+                    capture={item.capture}
+                    onChange={(e) => {
+                      handleFileUpload(e);
+                      setIsAttachmentMenuOpen(false);
+                    }} 
+                  />
+                )}
               </label>
             ))}
           </div>
@@ -309,7 +322,7 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
             <input
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              className="w-full py-3.5 pl-12 pr-12 bg-white/[0.05] border border-white/[0.1] rounded-3xl focus:ring-2 focus:ring-purple-500/30 text-white placeholder-gray-500 outline-none"
+              className="w-full py-3.5 pl-12 pr-12 bg-white/[0.05] border border-white/[0.1] rounded-3xl focus:ring-2 focus:ring-purple-500/30 text-[16px] text-white placeholder-gray-500 outline-none"
               placeholder="Type a message..."
             />
             {/* Paperclip Button */}

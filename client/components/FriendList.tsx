@@ -120,7 +120,7 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
           placeholder="Search for people..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-10 pr-4 py-2.5 bg-white/[0.03] border border-white/[0.05] rounded-xl focus:ring-2 focus:ring-purple-500/30 text-sm text-white placeholder-gray-500 outline-none"
+          className="w-full pl-10 pr-4 py-2.5 bg-white/[0.03] border border-white/[0.05] rounded-xl focus:ring-2 focus:ring-purple-500/30 text-[16px] text-white placeholder-gray-500 outline-none"
         />
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-purple-400 transition-colors"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
       </div>
@@ -135,7 +135,11 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
                 key={user.id} 
                 user={user} 
                 isSelected={selectedUserId === user.id} 
-                onClick={() => { onSelectUser(user); setSearch(''); }} 
+                onClick={() => { 
+                  onSelectUser(user); 
+                  setSearch(''); 
+                  setUnreadCounts(prev => ({...prev, [String(user.id)]: 0})); 
+                }} 
                 unreadCount={unreadCounts[user.id] || 0}
               />
             ))}
@@ -153,7 +157,10 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
                 key={user.id} 
                 user={user} 
                 isSelected={selectedUserId === user.id} 
-                onClick={() => onSelectUser(user)} 
+                onClick={() => { 
+                  onSelectUser(user); 
+                  setUnreadCounts(prev => ({...prev, [String(user.id)]: 0})); 
+                }} 
                 unreadCount={unreadCounts[String(user.id)] || 0}
               />
             ))}

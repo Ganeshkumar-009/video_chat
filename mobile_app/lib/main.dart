@@ -110,13 +110,8 @@ class _WebviewScreenState extends State<WebviewScreen> {
           
           // 2. Handle GALLERY (Images/Videos)
           if (params.acceptTypes.any((type) => type.contains('image') || type.contains('video'))) {
-            if (params.acceptTypes.contains('video/*')) {
-              final XFile? video = await picker.pickVideo(source: ImageSource.gallery);
-              return video != null ? [Uri.file(video.path).toString()] : [];
-            } else {
-              final XFile? image = await picker.pickImage(source: ImageSource.gallery);
-              return image != null ? [Uri.file(image.path).toString()] : [];
-            }
+            final XFile? media = await picker.pickMedia();
+            return media != null ? [Uri.file(media.path).toString()] : [];
           }
           
           // 3. Handle DOCUMENTS
