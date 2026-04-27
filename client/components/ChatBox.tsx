@@ -88,7 +88,15 @@ export default function ChatBox({ recipient, currentUser }: ChatBoxProps) {
       }]);
 
     if (error) {
-      console.error('Error saving message:', error);
+      console.error('SUPABASE ERROR:', error.message);
+      console.error('Attempted to insert into "messages" with:', {
+        room_id: roomId,
+        sender_id: currentUser.id,
+        sender_username: currentUser.username,
+        content: message,
+        receiver_id: recipient.id
+      });
+      toast.error('Message failed to save to database');
     }
 
     // 2. Broadcast via Socket (Real-time)
