@@ -39,16 +39,31 @@ export default function ChatBox({ recipient, currentUser }: ChatBoxProps) {
     };
     fetchHistory();
 
-    // 2. Setup Real-time Sockets
+    // 2. Setup Real-time Listener (Directly from Database)
+    const channel = supabase
+      .channel(`room-${roomId}`)
+      .on('postgres_changes', { 
+        event: 'INSERT', 
+        schema: 'public', 
+        table: 'messages',
+        filter: `room_id=eq.${roomId}`
+      }, (payload) => {
+        const newMsg = payload.new;
+        // Only add if it's from the OTHER user (since we add ours optimistically)
+        if (newMsg.sender_username !== currentUser.username) {
+          setMessages(prev => [...prev, {
+            text: newMsg.content,
+            user: newMsg.sender_username,
+            timestamp: newMsg.created_at,
+            room: newMsg.room_id
+          }]);
+        }
+      })
+      .subscribe();
+
+    // 3. Keep Sockets for other features (optional)
     socketRef.current = io(process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000');
     socketRef.current.emit('join-room', roomId, currentUser.id);
-
-    socketRef.current.on('chat-message', (data: any) => {
-      // Only add messages that belong to this room and are NOT from me (since I add mine optimistically)
-      if (data.room === roomId && data.user !== currentUser.username) {
-        setMessages(prev => [...prev, data]);
-      }
-    });
 
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -58,6 +73,7 @@ export default function ChatBox({ recipient, currentUser }: ChatBoxProps) {
     document.addEventListener('mousedown', handleClickOutside);
 
     return () => {
+      supabase.removeChannel(channel);
       socketRef.current?.disconnect();
       document.removeEventListener('mousedown', handleClickOutside);
     };
