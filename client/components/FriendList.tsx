@@ -32,7 +32,7 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
       if (curr) {
         const { data: msgData } = await supabase
           .from('messages')
-          .select('sender_id, receiver_id, content, created_at')
+          .select('sender_id, receiver_id, content, created_at, is_read')
           .or(`sender_id.eq.${curr.id},receiver_id.eq.${curr.id}`)
           .order('created_at', { ascending: false });
 
@@ -44,13 +44,15 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
             const otherId = m.sender_id === curr.id ? m.receiver_id : m.sender_id;
             participantIds.add(otherId);
             
-            // Mock unread logic (since we don't have is_read column yet, 
-            // we'll count messages from others received in the last hour as a demo)
-            // Ideally this would check an 'is_read' boolean column.
+            // Real unread logic
+            if (m.receiver_id === curr.id && !m.is_read) {
+              unreads[m.sender_id] = (unreads[m.sender_id] || 0) + 1;
+            }
           });
 
           const recents = usersList.filter(u => participantIds.has(u.id));
           setRecentUsers(recents);
+          setUnreadCounts(unreads);
         }
       }
     };
@@ -102,7 +104,7 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
                 user={user} 
                 isSelected={selectedUserId === user.id} 
                 onClick={() => { onSelectUser(user); setSearch(''); }} 
-                unreadCount={0}
+                unreadCount={unreadCounts[user.id] || 0}
               />
             ))}
             {filteredSearch.length === 0 && (
@@ -121,7 +123,7 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
                   user={user} 
                   isSelected={selectedUserId === user.id} 
                   onClick={() => onSelectUser(user)} 
-                  unreadCount={0} // To be connected to real data
+                  unreadCount={unreadCounts[user.id] || 0}
                 />
               ))
             ) : (

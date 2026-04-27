@@ -31,11 +31,20 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
         
       if (!error && data) {
         setMessages(data.map(m => ({
+          id: m.id,
           text: m.content,
           user: m.sender_username,
           timestamp: m.created_at,
-          room: m.room_id
+          room: m.room_id,
+          is_read: m.is_read
         })));
+
+        // Mark messages as read in the database
+        await supabase
+          .from('messages')
+          .update({ is_read: true })
+          .eq('room_id', roomId)
+          .eq('receiver_id', currentUser.id);
       }
     };
     fetchHistory();
