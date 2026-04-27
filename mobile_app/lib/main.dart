@@ -8,10 +8,26 @@ final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterL
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Initialize Notifications
+  // 1. Setup Premium Notification Channel
+  const AndroidNotificationChannel channel = AndroidNotificationChannel(
+    'high_importance_channel', // id
+    'High Importance Notifications', // title
+    description: 'This channel is used for important chat notifications.', // description
+    importance: Importance.max,
+    enableVibration: true,
+    playSound: true,
+    showBadge: true,
+  );
+
   const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
   const InitializationSettings initializationSettings = InitializationSettings(android: initializationSettingsAndroid);
+  
   await flutterLocalNotificationsPlugin.initialize(initializationSettings);
+
+  // 2. Register the channel with Android
+  await flutterLocalNotificationsPlugin
+      .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+      ?.createNotificationChannel(channel);
 
   runApp(const MyApp());
 }
@@ -52,7 +68,7 @@ class _WebviewScreenState extends State<WebviewScreen> {
   }
 
   Future<void> _initApp() async {
-    // REQUEST ALL PERMISSIONS AT ONCE (Camera, Mic, Notifications)
+    // Request permissions quietly
     await [
       Permission.camera,
       Permission.microphone,
@@ -83,11 +99,23 @@ class _WebviewScreenState extends State<WebviewScreen> {
 
   Future<void> _showNotification(String text) async {
     const AndroidNotificationDetails androidPlatformChannelSpecifics =
-        AndroidNotificationDetails('chat_messages', 'Chat Messages',
+        AndroidNotificationDetails(
+            'high_importance_channel', 
+            'High Importance Notifications',
+            channelDescription: 'Chat Messages',
             importance: Importance.max,
             priority: Priority.high,
-            showWhen: true);
+            ticker: 'ticker',
+            color: Color(0xFF9C27B0), // Premium Purple Color
+            ledColor: Color(0xFF9C27B0),
+            ledOnMs: 1000,
+            ledOffMs: 500,
+            enableLights: true,
+            enableVibration: true,
+            styleInformation: BigTextStyleInformation(''), // Allows long messages
+        );
     const NotificationDetails platformChannelSpecifics = NotificationDetails(android: androidPlatformChannelSpecifics);
+    
     await flutterLocalNotificationsPlugin.show(
         0, 'New Message', text, platformChannelSpecifics);
   }
