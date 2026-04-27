@@ -128,10 +128,33 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
     setMessage('');
   };
 
-  const handleClearChat = async () => {
-    await supabase.from('messages').delete().eq('room_id', roomId);
-    setMessages([]);
-    setIsMenuOpen(false);
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random()}.${fileExt}`;
+      const filePath = `${currentUser.id}/${fileName}`;
+
+      // Upload to Supabase Storage (Bucket must be named 'chat-media')
+      const { data, error } = await supabase.storage
+        .from('chat-media')
+        .upload(filePath, file);
+
+      if (error) throw error;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('chat-media')
+        .getPublicUrl(filePath);
+
+      // Send the URL as a message
+      setMessage(publicUrl);
+      toast.success('File ready to send!');
+    } catch (error: any) {
+      toast.error('Upload failed: Make sure "chat-media" bucket exists in Supabase');
+      console.error(error);
+    }
   };
 
   return (
@@ -152,7 +175,7 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
               <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center justify-center text-white font-bold shadow-lg shadow-purple-500/20">
                 {recipient.username?.[0]?.toUpperCase() || 'U'}
               </div>
-              <div className={`absolute bottom-0 right-0 w-3 h-3 border-2 border-[#0a0a0b] rounded-full ${recipient.status === 'online' ? 'bg-green-500' : 'bg-gray-600'}`}></div>
+              <div className={`absolute bottom-0 right-0 w-3 h-3 border-2 border-[#0a0a0b] rounded-full ${recipient.status === 'online' ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-gray-600'}`}></div>
             </div>
             <div>
               <h2 className="text-white font-bold text-[16px] leading-tight">{recipient.username}</h2>
@@ -197,6 +220,9 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
       <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar scroll-smooth">
         {messages.map((msg: any, i: number) => {
           const isOwn = msg.user === currentUser.username;
+          const isImage = msg.text.match(/\.(jpeg|jpg|gif|png|webp)$/) != null;
+          const isVideo = msg.text.match(/\.(mp4|webm|ogg)$/) != null;
+
           return (
             <div key={i} className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'} animate-in slide-in-from-bottom-1 duration-300`}>
               <div className="max-w-[85%]">
@@ -205,7 +231,13 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
                     ? 'bg-purple-600 text-white rounded-tr-none shadow-lg shadow-purple-600/10' 
                     : 'bg-white/[0.05] border border-white/[0.05] text-gray-100 rounded-tl-none'
                 }`}>
-                  <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">{msg.text}</p>
+                  {isImage ? (
+                    <img src={msg.text} alt="Shared media" className="max-w-full rounded-lg my-1 shadow-2xl" />
+                  ) : isVideo ? (
+                    <video src={msg.text} controls className="max-w-full rounded-lg my-1 shadow-2xl" />
+                  ) : (
+                    <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">{msg.text}</p>
+                  )}
                 </div>
                 <span className={`text-[10px] text-gray-500 mt-1 block px-1 ${isOwn ? 'text-right' : 'text-left'}`}>
                   {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -215,11 +247,6 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
           );
         })}
         <div ref={messagesEndRef} />
-        {messages.length === 0 && (
-          <div className="h-full flex flex-col items-center justify-center opacity-20 pointer-events-none select-none py-20">
-            <p className="text-sm font-bold uppercase tracking-[0.3em]">No messages yet</p>
-          </div>
-        )}
       </div>
 
       {/* WhatsApp Style Input */}
@@ -229,18 +256,20 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
             <input
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              className="w-full py-3.5 pl-5 pr-12 bg-white/[0.05] border border-white/[0.1] rounded-3xl focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/30 text-white placeholder-gray-500 transition-all duration-300 outline-none"
+              className="w-full py-3.5 pl-12 pr-12 bg-white/[0.05] border border-white/[0.1] rounded-3xl focus:ring-2 focus:ring-purple-500/30 text-white placeholder-gray-500 outline-none"
               placeholder="Type a message..."
             />
-            <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-gray-500">
-               <button type="button" className="p-2 hover:text-white transition-colors">
-                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.51a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-               </button>
+            {/* Attachment Button */}
+            <div className="absolute left-2 top-1/2 -translate-y-1/2">
+              <label className="p-2 hover:bg-white/10 rounded-full cursor-pointer transition-colors block text-gray-400 hover:text-white">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.51a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                <input type="file" className="hidden" onChange={handleFileUpload} />
+              </label>
             </div>
           </div>
           <button 
             type="submit"
-            className="p-3.5 rounded-full bg-purple-600 hover:bg-purple-500 text-white active:scale-90 transition-all duration-200 shadow-lg shadow-purple-600/20"
+            className="p-3.5 rounded-full bg-purple-600 hover:bg-purple-500 text-white active:scale-90 transition-all shadow-lg shadow-purple-600/20"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polyline points="22 2 15 22 11 13 2 9 22 2"/></svg>
           </button>

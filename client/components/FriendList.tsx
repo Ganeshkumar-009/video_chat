@@ -126,23 +126,22 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
           </div>
         )}
 
-        {/* Recent Chats Section */}
+        {/* Recent Chats or All Users (Nuclear Fix) */}
         {search.trim() === '' && (
           <div>
-            {recentUsers.length > 0 ? (
-              recentUsers.map((user: any) => (
-                <UserItem 
-                  key={user.id} 
-                  user={user} 
-                  isSelected={selectedUserId === user.id} 
-                  onClick={() => onSelectUser(user)} 
-                  unreadCount={unreadCounts[user.id] || 0}
-                />
-              ))
-            ) : (
+            {(recentUsers.length > 0 ? recentUsers : allUsers.filter(u => String(u.id) !== String(currentUser?.id))).map((user: any) => (
+              <UserItem 
+                key={user.id} 
+                user={user} 
+                isSelected={selectedUserId === user.id} 
+                onClick={() => onSelectUser(user)} 
+                unreadCount={unreadCounts[String(user.id)] || 0}
+              />
+            ))}
+            {allUsers.length <= 1 && recentUsers.length === 0 && (
               <div className="py-20 flex flex-col items-center justify-center opacity-20 px-10">
                  <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" className="mb-4 text-purple-400"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                 <p className="text-[12px] font-bold tracking-widest text-center uppercase">Start a new conversation</p>
+                 <p className="text-[12px] font-bold tracking-widest text-center uppercase">Waiting for users to join...</p>
               </div>
             )}
           </div>
