@@ -191,17 +191,21 @@ function UserItem({ user, isSelected, onClick, unreadCount }: { user: any, isSel
 
       <div className="flex-1 min-w-0">
         <div className="flex justify-between items-baseline mb-0.5">
-          <div className={`text-[16px] font-bold truncate transition-colors ${isSelected ? 'text-white' : 'text-gray-100 group-hover:text-white'}`}>
+          <div className={`text-[16px] font-bold truncate transition-colors ${
+            unreadCount > 0 ? 'text-green-500 font-black' : isSelected ? 'text-white' : 'text-gray-100 group-hover:text-white'
+          }`}>
             {user.username}
           </div>
-          <span className={`text-[11px] font-medium ${unreadCount > 0 ? 'text-green-500' : 'text-gray-500'}`}>Just now</span>
+          <span className={`text-[11px] font-medium ${unreadCount > 0 ? 'text-green-500' : 'text-gray-500'}`}>
+            {unreadCount > 0 ? 'New message' : 'Just now'}
+          </span>
         </div>
         <div className="flex items-center justify-between">
           <div className={`text-[13px] truncate ${isSelected ? 'text-purple-300/70' : 'text-gray-500 group-hover:text-gray-400'}`}>
             {user.status === 'online' ? 'Active now' : 'Last seen recently'}
           </div>
           {unreadCount > 0 && (
-            <div className="bg-green-500 text-[#0a0a0b] text-[11px] font-black min-w-[20px] h-5 px-1.5 rounded-full flex items-center justify-center shadow-lg shadow-green-500/20">
+            <div className="bg-green-500 text-black text-[11px] font-black min-w-[22px] h-[22px] px-1 rounded-full flex items-center justify-center shadow-lg shadow-green-500/40 animate-pulse">
               {unreadCount}
             </div>
           )}

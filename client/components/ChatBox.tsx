@@ -163,8 +163,21 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
     }
   };
 
+  const [isAttachmentMenuOpen, setIsAttachmentMenuOpen] = useState(false);
+  const attachmentMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (attachmentMenuRef.current && !attachmentMenuRef.current.contains(event.target as Node)) {
+        setIsAttachmentMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   return (
-    <div className="h-full flex flex-col bg-transparent">
+    <div className="h-full flex flex-col bg-transparent overflow-hidden">
       {/* WhatsApp Style Header */}
       <div className="p-3 border-b border-white/[0.05] flex items-center justify-between backdrop-blur-md bg-[#0a0a0b]/80 sticky top-0 z-50">
         <div className="flex items-center gap-2">
@@ -192,7 +205,7 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
           </div>
         </div>
 
-        {/* WhatsApp Action Icons */}
+        {/* Action Icons */}
         <div className="flex items-center gap-1" ref={menuRef}>
           <button className="p-2.5 rounded-full hover:bg-white/10 text-gray-300 transition-colors">
             <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.934a.5.5 0 0 0-.777-.416L16 11"/><rect width="14" height="12" x="2" y="6" rx="2"/></svg>
@@ -223,14 +236,14 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar scroll-smooth">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
         {messages.map((msg: any, i: number) => {
           const isOwn = msg.user === currentUser.username;
-          const isImage = msg.text.match(/\.(jpeg|jpg|gif|png|webp)$/) != null;
-          const isVideo = msg.text.match(/\.(mp4|webm|ogg)$/) != null;
+          const isImage = typeof msg.text === 'string' && msg.text.match(/\.(jpeg|jpg|gif|png|webp)/) != null;
+          const isVideo = typeof msg.text === 'string' && msg.text.match(/\.(mp4|webm|ogg)/) != null;
 
           return (
-            <div key={i} className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'} animate-in slide-in-from-bottom-1 duration-300`}>
+            <div key={i} className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'}`}>
               <div className="max-w-[85%]">
                 <div className={`px-4 py-2 rounded-2xl ${
                   isOwn 
@@ -255,8 +268,33 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
         <div ref={messagesEndRef} />
       </div>
 
-      {/* WhatsApp Style Input */}
-      <div className="p-4 bg-transparent">
+      {/* Input Section */}
+      <div className="p-4 bg-transparent relative">
+        {/* ATTACHMENT MENU (WhatsApp Style) */}
+        {isAttachmentMenuOpen && (
+          <div 
+            ref={attachmentMenuRef}
+            className="absolute bottom-20 left-4 w-64 bg-[#1c1c1e] border border-white/[0.1] rounded-3xl shadow-2xl p-4 grid grid-cols-3 gap-4 animate-in fade-in zoom-in-95 duration-200 z-[100]"
+          >
+            {[
+              { label: 'Document', color: 'bg-indigo-500', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z' },
+              { label: 'Camera', color: 'bg-pink-500', icon: 'M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z' },
+              { label: 'Gallery', color: 'bg-purple-500', icon: 'm22 13-1.29-1.29a2.41 2.41 0 0 0-3.42 0L12 17l-3.3-3.3a2.41 2.41 0 0 0-3.41 0L2 17' },
+              { label: 'Audio', color: 'bg-orange-500', icon: 'M9 18V5l12-2v13' },
+              { label: 'Location', color: 'bg-green-500', icon: 'M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z' },
+              { label: 'Contact', color: 'bg-blue-500', icon: 'M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2' },
+            ].map((item, idx) => (
+              <label key={idx} className="flex flex-col items-center gap-2 cursor-pointer group">
+                <div className={`w-12 h-12 ${item.color} rounded-full flex items-center justify-center text-white shadow-lg group-active:scale-90 transition-transform`}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d={item.icon}/></svg>
+                </div>
+                <span className="text-[10px] text-gray-400 font-medium">{item.label}</span>
+                <input type="file" className="hidden" onChange={handleFileUpload} />
+              </label>
+            ))}
+          </div>
+        )}
+
         <form onSubmit={sendMessage} className="flex items-center gap-2">
           <div className="flex-1 relative">
             <input
@@ -265,12 +303,15 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
               className="w-full py-3.5 pl-12 pr-12 bg-white/[0.05] border border-white/[0.1] rounded-3xl focus:ring-2 focus:ring-purple-500/30 text-white placeholder-gray-500 outline-none"
               placeholder="Type a message..."
             />
-            {/* Attachment Button */}
+            {/* Paperclip Button */}
             <div className="absolute left-2 top-1/2 -translate-y-1/2">
-              <label className="p-2 hover:bg-white/10 rounded-full cursor-pointer transition-colors block text-gray-400 hover:text-white">
+              <button 
+                type="button"
+                onClick={() => setIsAttachmentMenuOpen(!isAttachmentMenuOpen)}
+                className={`p-2 rounded-full transition-colors block ${isAttachmentMenuOpen ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white hover:bg-white/10'}`}
+              >
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.51a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-                <input type="file" className="hidden" onChange={handleFileUpload} />
-              </label>
+              </button>
             </div>
           </div>
           <button 
