@@ -48,7 +48,12 @@ class _WebviewScreenState extends State<WebviewScreen> {
   @override
   void initState() {
     super.initState();
-    _requestPermissions();
+    _initApp();
+  }
+
+  Future<void> _initApp() async {
+    // Force request permissions
+    await _requestPermissions();
     
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
@@ -82,17 +87,23 @@ class _WebviewScreenState extends State<WebviewScreen> {
         AndroidNotificationDetails('chat_messages', 'Chat Messages',
             importance: Importance.max,
             priority: Priority.high,
-            showWhen: true);
+            showWhen: true,
+            ticker: 'ticker');
     const NotificationDetails platformChannelSpecifics = NotificationDetails(android: androidPlatformChannelSpecifics);
     await flutterLocalNotificationsPlugin.show(
         0, 'New Message', text, platformChannelSpecifics);
   }
 
   Future<void> _requestPermissions() async {
+    // On Android 13+, we must request permission.notification explicitly
+    var status = await Permission.notification.status;
+    if (status.isDenied) {
+      await Permission.notification.request();
+    }
+    
     await [
       Permission.camera,
       Permission.microphone,
-      Permission.notification,
     ].request();
   }
 

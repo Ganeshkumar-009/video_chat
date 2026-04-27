@@ -49,10 +49,17 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
         const unreads: Record<string, number> = {};
         
         allMsgs.forEach((m: any) => {
-          const otherId = String(m.sender_id || m.receiver_id);
-          if (otherId !== String(curr.id)) {
+          const sId = String(m.sender_id || '');
+          const rId = String(m.receiver_id || '');
+          const cId = String(curr.id);
+
+          const otherId = sId === cId ? rId : sId;
+          
+          if (otherId && otherId !== cId && otherId !== 'undefined') {
             participantIds.add(otherId);
-            if (m.sender_id && !m.is_read) {
+            
+            // Only count if you are the receiver AND it's not read yet
+            if (rId === cId && m.is_read === false) {
               unreads[otherId] = (unreads[otherId] || 0) + 1;
             }
           }
