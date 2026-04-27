@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
 import FriendList from '@/components/FriendList';
 import ChatBox from '@/components/ChatBox';
 
