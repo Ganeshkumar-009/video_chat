@@ -27,8 +27,8 @@ export default function Dashboard() {
 
   return (
     <div className="flex h-screen bg-[#0a0a0b] text-gray-100 overflow-hidden font-sans">
-      {/* Sidebar */}
-      <aside className="w-80 bg-white/[0.02] border-r border-white/[0.05] backdrop-blur-xl flex flex-col">
+      {/* Sidebar - Hidden on mobile if a user is selected */}
+      <aside className={`w-full md:w-80 bg-white/[0.02] border-r border-white/[0.05] backdrop-blur-xl flex flex-col ${selectedUser ? 'hidden md:flex' : 'flex'}`}>
         <div className="p-6 border-b border-white/[0.05] flex items-center justify-between bg-gradient-to-b from-white/[0.02] to-transparent">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-purple-600 to-violet-600 flex items-center justify-center font-bold text-white shadow-lg shadow-purple-500/20">
@@ -56,10 +56,14 @@ export default function Dashboard() {
         </div>
       </aside>
 
-      {/* Main Chat Area */}
-      <main className="flex-1 flex flex-col relative bg-[radial-gradient(circle_at_center,rgba(120,119,198,0.05)_0%,transparent_70%)]">
+      {/* Main Chat Area - Hidden on mobile if NO user is selected */}
+      <main className={`flex-1 flex flex-col relative bg-[radial-gradient(circle_at_center,rgba(120,119,198,0.05)_0%,transparent_70%)] ${!selectedUser ? 'hidden md:flex' : 'flex'}`}>
         {selectedUser ? (
-          <ChatBox recipient={selectedUser} currentUser={user} />
+          <ChatBox 
+            recipient={selectedUser} 
+            currentUser={user} 
+            onBack={() => setSelectedUser(null)} 
+          />
         ) : (
           <div className="h-full flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-700">
             <div className="w-24 h-24 rounded-3xl bg-white/[0.03] border border-white/[0.05] flex items-center justify-center mb-6 shadow-2xl">
