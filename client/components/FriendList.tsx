@@ -32,26 +32,38 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
       if (curr) {
         const { data: msgData } = await supabase
           .from('messages')
-          .select('sender_id, receiver_id, content, created_at, is_read')
+          .select('sender_id, receiver_id, is_read')
           .or(`sender_id.eq.${curr.id},receiver_id.eq.${curr.id}`)
           .order('created_at', { ascending: false });
 
         if (msgData) {
-          const participantIds = new Set();
+          const participantIds = new Set<string>();
           const unreads: Record<string, number> = {};
           
           msgData.forEach((m: any) => {
-            const otherId = m.sender_id === curr.id ? m.receiver_id : m.sender_id;
+            // Ensure we are dealing with strings for the Set
+            const sId = String(m.sender_id);
+            const rId = String(m.receiver_id);
+            const cId = String(curr.id);
+
+            const otherId = sId === cId ? rId : sId;
             participantIds.add(otherId);
             
-            // Real unread logic
-            if (m.receiver_id === curr.id && !m.is_read) {
-              unreads[m.sender_id] = (unreads[m.sender_id] || 0) + 1;
+            // Unread logic
+            if (rId === cId && !m.is_read) {
+              unreads[otherId] = (unreads[otherId] || 0) + 1;
             }
           });
 
-          const recents = usersList.filter(u => participantIds.has(u.id));
-          setRecentUsers(recents);
+          // Filter users who are in our participant list
+          const recents = usersList.filter(u => participantIds.has(String(u.id)));
+          
+          // Sort recents based on the order of participantIds (most recent first)
+          const sortedRecents = Array.from(participantIds)
+            .map(id => recents.find(u => String(u.id) === id))
+            .filter(Boolean);
+
+          setRecentUsers(sortedRecents);
           setUnreadCounts(unreads);
         }
       }
