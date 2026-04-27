@@ -44,6 +44,7 @@ class WebviewScreen extends StatefulWidget {
 class _WebviewScreenState extends State<WebviewScreen> {
   late final WebViewController _controller;
   bool _isLoading = true;
+  bool _showNotifyPrompt = false;
 
   @override
   void initState() {
@@ -52,8 +53,14 @@ class _WebviewScreenState extends State<WebviewScreen> {
   }
 
   Future<void> _initApp() async {
-    // Force request permissions
-    await _requestPermissions();
+    // Check notification status
+    var status = await Permission.notification.status;
+    if (!status.isGranted) {
+      setState(() => _showNotifyPrompt = true);
+    }
+    
+    // Request other basic permissions
+    await [Permission.camera, Permission.microphone].request();
     
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
@@ -65,11 +72,6 @@ class _WebviewScreenState extends State<WebviewScreen> {
           },
           onPageFinished: (String url) {
             setState(() => _isLoading = false);
-          },
-          onWebResourceError: (WebResourceError error) {
-            if (error.description.contains('ERR_CACHE_MISS')) {
-              _controller.reload();
-            }
           },
         ),
       )
@@ -87,29 +89,10 @@ class _WebviewScreenState extends State<WebviewScreen> {
         AndroidNotificationDetails('chat_messages', 'Chat Messages',
             importance: Importance.max,
             priority: Priority.high,
-            showWhen: true,
-            ticker: 'ticker');
+            showWhen: true);
     const NotificationDetails platformChannelSpecifics = NotificationDetails(android: androidPlatformChannelSpecifics);
     await flutterLocalNotificationsPlugin.show(
         0, 'New Message', text, platformChannelSpecifics);
-  }
-
-  Future<void> _requestPermissions() async {
-    // Check if permission is already granted
-    var status = await Permission.notification.status;
-    
-    if (status.isPermanentlyDenied) {
-      // If the user denied it forever, take them to settings
-      await openAppSettings();
-    } else if (status.isDenied) {
-      // If it's the first time or they just denied it once, ask again
-      await Permission.notification.request();
-    }
-    
-    await [
-      Permission.camera,
-      Permission.microphone,
-    ].request();
   }
 
   @override
@@ -122,8 +105,68 @@ class _WebviewScreenState extends State<WebviewScreen> {
             WebViewWidget(controller: _controller),
             if (_isLoading)
               const Center(
-                child: CircularProgressIndicator(
-                  color: Colors.purple,
+                child: CircularProgressIndicator(color: Colors.purple),
+              ),
+            // THE SMART NOTIFICATION PROMPT
+            if (_showNotifyPrompt)
+              Positioned(
+                bottom: 20,
+                left: 20,
+                right: 20,
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF161618),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.purple.withOpacity(0.3)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.5),
+                        blurRadius: 20,
+                        offset: const Offset(0, 10),
+                      )
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        "Enable Notifications",
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        "To get messages instantly, please allow notifications for this app.",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.grey, fontSize: 13),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextButton(
+                              onPressed: () => setState(() => _showNotifyPrompt = false),
+                              child: const Text("Maybe Later", style: TextStyle(color: Colors.grey)),
+                            ),
+                          ),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: () async {
+                                await openAppSettings();
+                                setState(() => _showNotifyPrompt = false);
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.purple,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              child: const Text("Allow Now"),
+                            ),
+                          ),
+                        ],
+                      )
+                    ],
+                  ),
                 ),
               ),
           ],
