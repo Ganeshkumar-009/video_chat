@@ -51,16 +51,32 @@ export default function Dashboard() {
         await supabase.from('users').update({ fcm_token: token }).eq('id', parsedUser.id);
       };
 
-      // 4. Set Offline on Close
+      // 4. Request Token from Flutter now that React is ready
+      if ((window as any).FCMChannel) {
+        (window as any).FCMChannel.postMessage('requestToken');
+      }
+
+      // 5. Set Offline on Close or Background (Mobile-Proof)
       const handleTabClose = () => {
         supabase.from('users').update({ status: 'offline', last_seen: new Date().toISOString() }).eq('id', parsedUser.id).then();
       };
+      
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === 'hidden') {
+          handleTabClose();
+        } else if (document.visibilityState === 'visible') {
+          supabase.from('users').update({ status: 'online', last_seen: new Date().toISOString() }).eq('id', parsedUser.id).then();
+        }
+      };
+
       window.addEventListener('beforeunload', handleTabClose);
+      document.addEventListener('visibilitychange', handleVisibilityChange);
 
       return () => {
         clearInterval(presenceInterval);
         supabase.removeChannel(channel);
         window.removeEventListener('beforeunload', handleTabClose);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
       };
     }
   }, [router]);

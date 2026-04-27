@@ -123,9 +123,31 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
     if (error) {
       console.error('SUPABASE ERROR:', error.message);
       toast.error('Message failed to save to database');
+    } else {
+      // 3. Trigger Firebase Push Notification
+      try {
+        const { data: userData } = await supabase.from('users').select('fcm_token').eq('id', recipient.id).single();
+        if (userData?.fcm_token) {
+          const isImage = message.match(/\.(jpeg|jpg|gif|png|webp)/) != null;
+          const isVideo = message.match(/\.(mp4|webm|ogg)/) != null;
+          const bodyText = isImage ? '📷 Sent an image' : isVideo ? '🎥 Sent a video' : message;
+          
+          await fetch('/api/notify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              token: userData.fcm_token,
+              title: `WeChat: ${currentUser.username}`,
+              body: bodyText
+            })
+          });
+        }
+      } catch (pushErr) {
+        console.error('Push error:', pushErr);
+      }
     }
 
-    // 3. Broadcast via Socket (Real-time)
+    // 4. Broadcast via Socket (Real-time)
     socketRef.current.emit('chat-message', msgData);
     setMessage('');
   };

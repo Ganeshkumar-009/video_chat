@@ -86,6 +86,7 @@ class _WebviewScreenState extends State<WebviewScreen> {
     ].request();
     
     final WebViewController controller = WebViewController();
+    await controller.clearCache();
 
     controller
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
@@ -105,6 +106,17 @@ class _WebviewScreenState extends State<WebviewScreen> {
       ..addJavaScriptChannel(
         'NotificationChannel',
         onMessageReceived: (JavaScriptMessage message) => _showNotification(message.message),
+      )
+      ..addJavaScriptChannel(
+        'FCMChannel',
+        onMessageReceived: (JavaScriptMessage message) async {
+          if (message.message == 'requestToken') {
+            final token = await FirebaseMessaging.instance.getToken();
+            if (token != null) {
+              controller.runJavaScript("if (window.setFCMToken) { window.setFCMToken('$token'); }");
+            }
+          }
+        },
       )
       ..loadRequest(Uri.parse('https://video-chat-1-t2xb.onrender.com/'));
 
