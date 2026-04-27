@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
+import toast from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
 
 interface FriendListProps {
