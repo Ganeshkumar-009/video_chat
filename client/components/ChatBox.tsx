@@ -44,7 +44,8 @@ export default function ChatBox({ recipient, currentUser }: ChatBoxProps) {
     socketRef.current.emit('join-room', roomId, currentUser.id);
 
     socketRef.current.on('chat-message', (data: any) => {
-      if (data.room === roomId) {
+      // Only add messages that belong to this room and are NOT from me (since I add mine optimistically)
+      if (data.room === roomId && data.user !== currentUser.username) {
         setMessages(prev => [...prev, data]);
       }
     });
@@ -77,7 +78,10 @@ export default function ChatBox({ recipient, currentUser }: ChatBoxProps) {
       timestamp: new Date().toISOString()
     };
 
-    // 1. Save to Supabase (Persistence)
+    // 1. Update UI immediately (Optimistic Update)
+    setMessages(prev => [...prev, msgData]);
+
+    // 2. Save to Supabase (Persistence)
     const { error } = await supabase
       .from('messages')
       .insert([{
@@ -90,17 +94,10 @@ export default function ChatBox({ recipient, currentUser }: ChatBoxProps) {
 
     if (error) {
       console.error('SUPABASE ERROR:', error.message);
-      console.error('Attempted to insert into "messages" with:', {
-        room_id: roomId,
-        sender_id: currentUser.id,
-        sender_username: currentUser.username,
-        content: message,
-        receiver_id: recipient.id
-      });
       toast.error('Message failed to save to database');
     }
 
-    // 2. Broadcast via Socket (Real-time)
+    // 3. Broadcast via Socket (Real-time)
     socketRef.current.emit('chat-message', msgData);
     setMessage('');
   };

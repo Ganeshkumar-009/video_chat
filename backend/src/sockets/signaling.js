@@ -24,8 +24,8 @@ module.exports = (io, supabaseAdmin) => {
     });
 
     // Chat
-    socket.on('chat-message', (data) => {
-      io.to(data.room).emit('chat-message', data);
+    socket.on('chat-message', (msg) => {
+      io.to(msg.room).emit('chat-message', msg);
     });
 
     socket.on('disconnect', () => {
