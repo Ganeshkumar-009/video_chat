@@ -9,7 +9,7 @@ export default function FriendList() {
   useEffect(() => {
     const fetchUsers = async () => {
       const { data } = await supabase
-        .from('profiles')
+        .from('users')
         .select('*');
       setUsers(data || []);
     };
@@ -28,7 +28,7 @@ export default function FriendList() {
       });
   };
 
-  const filteredUsers = users.filter((u: any) => u.displayName?.toLowerCase().includes(search.toLowerCase()));
+  const filteredUsers = users.filter((u: any) => u.username?.toLowerCase().includes(search.toLowerCase()));
 
   return (
     <div className="space-y-2">
@@ -41,7 +41,7 @@ export default function FriendList() {
       <ul>
         {filteredUsers.map((user: any) => (
           <li key={user.id} className="p-2 hover:bg-gray-100 rounded cursor-pointer flex justify-between">
-            {user.displayName || user.phoneNumber}
+            {user.username}
             <button onClick={() => sendFriendRequest(user.id)} className="ml-2 px-3 py-1 bg-blue-500 text-white text-sm rounded">
               Add Friend
             </button>

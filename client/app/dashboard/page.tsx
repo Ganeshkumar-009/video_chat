@@ -10,17 +10,17 @@ export default function Dashboard() {
   const router = useRouter();
 
   useEffect(() => {
-    supabase.auth.onAuthStateChange((event, session) => {
-      if (!session) {
-        router.push('/login');
-      } else {
-        setUser(session.user);
-      }
-    });
+    const storedUser = localStorage.getItem('currentUser');
+    if (!storedUser) {
+      router.push('/login');
+    } else {
+      setUser(JSON.parse(storedUser));
+    }
   }, [router]);
 
   const handleLogout = async () => {
-    const { error } = await supabase.auth.signOut();
+    localStorage.removeItem('currentUser');
+    router.push('/login');
   };
 
   if (!user) return <div>Loading...</div>;
@@ -28,7 +28,7 @@ export default function Dashboard() {
   return (
     <div className="flex h-screen bg-gray-100">
       <aside className="w-80 bg-white border-r p-4">
-        <h1 className="text-2xl font-bold mb-4">{user?.email || 'User'}</h1>
+        <h1 className="text-2xl font-bold mb-4">{user?.username || 'User'}</h1>
         <button onClick={handleLogout} className="w-full p-2 bg-red-500 text-white rounded mb-4">
           Logout
         </button>

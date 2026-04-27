@@ -6,10 +6,8 @@ import { supabase } from '@/lib/supabase';
 
 export default function Login() {
   const [isSignup, setIsSignup] = useState(false);
-  const [otpSent, setOtpSent] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
@@ -18,29 +16,22 @@ export default function Login() {
     setLoading(true);
     
     try {
-      // 1. First, find the email associated with this username
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('email')
-        .eq('displayName', email) // 'email' state now holds the username
+      const { data: user, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('username', email) // 'email' state is reused for username
+        .eq('password', password)
         .single();
 
-      if (profileError || !profile) {
-        throw new Error('Username not found');
+      if (error || !user) {
+        throw new Error('Invalid username or password');
       }
-
-      // 2. Sign in using the retrieved email
-      const { error } = await supabase.auth.signInWithPassword({
-        email: profile.email,
-        password,
-      });
-
-      if (error) throw error;
       
-      toast.success('Signed in successfully!');
+      toast.success('Welcome back!');
+      localStorage.setItem('currentUser', JSON.stringify(user));
       router.push('/dashboard');
     } catch (error: any) {
-      toast.error(error.message || 'Failed to sign in');
+      toast.error(error.message || 'Login failed');
     } finally {
       setLoading(false);
     }
@@ -51,52 +42,22 @@ export default function Login() {
     setLoading(true);
     
     try {
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: {
-          shouldCreateUser: true,
-          emailRedirectTo: undefined
-        }
-      });
+      const { data, error } = await supabase
+        .from('users')
+        .insert([{ 
+          username: email, // Reusing email state for username
+          password: password,
+          status: 'offline'
+        }])
+        .select()
+        .single();
 
       if (error) throw error;
       
-      setOtpSent(true);
-      toast.success(`OTP sent to ${email}! Check your inbox.`);
+      toast.success('Account created! Please sign in.');
+      setIsSignup(false);
     } catch (error: any) {
-      toast.error(error.message || 'Failed to sign up');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleVerifyOTP = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    
-    try {
-      const { error, data } = await supabase.auth.verifyOtp({
-        email,
-        token: otp,
-        type: 'email'
-      });
-
-      if (error) throw error;
-      
-      // Sign out so they don't auto-login, per requirements
-      if (data.session) {
-        await supabase.auth.signOut();
-      }
-
-      toast.success('Email verified! Please sign in.');
-      // Switch back to signin
-      setIsSignup(!isSignup);
-      setOtpSent(false);
-      setOtp('');
-      setPassword('');
-      // Keep email populated for convenience
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to verify OTP');
+      toast.error(error.message || 'Signup failed');
     } finally {
       setLoading(false);
     }
@@ -104,10 +65,8 @@ export default function Login() {
 
   const toggleForm = () => {
     setIsSignup(!isSignup);
-    setOtpSent(false);
     setEmail('');
     setPassword('');
-    setOtp('');
   };
 
   return (
@@ -120,20 +79,19 @@ export default function Login() {
         <div className="bg-white/[0.03] backdrop-blur-2xl rounded-3xl shadow-2xl border border-white/[0.08] p-8 sm:p-10 transition-all duration-500 hover:shadow-purple-500/10 hover:border-white/[0.12]">
           <div className="text-center mb-8">
             <h1 className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-violet-400 mb-3 tracking-tight">
-              {isSignup ? (otpSent ? 'Verify Email' : 'Join Us') : 'Welcome Back'}
+              {isSignup ? 'Join Us' : 'Welcome Back'}
             </h1>
             <p className="text-gray-400 text-sm font-medium">
               {isSignup 
-                ? (otpSent ? `Enter the 6-digit code sent to ${email}` : 'Create an account to get started') 
+                ? 'Create an account to get started'
                 : 'Sign in to access your dashboard'}
             </p>
           </div>
 
           <form 
-            onSubmit={isSignup ? (otpSent ? handleVerifyOTP : handleSignUp) : handleSignIn} 
+            onSubmit={isSignup ? handleSignUp : handleSignIn} 
             className="space-y-6"
           >
-            {(!isSignup || !otpSent) && (
               <div className="space-y-4 fade-in">
                 <div>
                   <label className="block text-gray-300 text-sm font-medium mb-2 ml-1">
@@ -170,26 +128,6 @@ export default function Login() {
                   />
                 </div>
               </div>
-            )}
-
-            {isSignup && otpSent && (
-              <div className="space-y-4 fade-in">
-                <div>
-                  <label className="block text-gray-300 text-sm font-medium mb-2 ml-1">
-                    Verification Code
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={otp}
-                    onChange={(e) => setOtp(e.target.value)}
-                    className="w-full px-5 py-4 bg-white/[0.03] border border-white/[0.08] rounded-xl focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 text-white placeholder-gray-500 text-center text-2xl tracking-[0.5em] transition-all duration-300 outline-none font-mono"
-                    placeholder="000000"
-                    maxLength={6}
-                  />
-                </div>
-              </div>
-            )}
 
             <button
               type="submit"
@@ -205,7 +143,7 @@ export default function Login() {
                   <span>Processing...</span>
                 </>
               ) : isSignup ? (
-                otpSent ? 'Verify & Continue' : 'Create Account'
+                'Create Account'
               ) : (
                 'Sign In'
               )}
