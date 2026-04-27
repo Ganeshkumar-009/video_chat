@@ -23,49 +23,50 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
     }
 
     const fetchData = async () => {
-      // 1. Fetch all users
-      const { data: usersData } = await supabase.from('users').select('*');
-      const usersList = usersData || [];
-      setAllUsers(usersList);
+      try {
+        // 1. Get current user session
+        const storedUser = localStorage.getItem('currentUser');
+        if (!storedUser) return;
+        const curr = JSON.parse(storedUser);
+        setCurrentUser(curr);
 
-      // 2. Fetch recent chat participants
-      if (curr) {
-        const { data: msgData } = await supabase
-          .from('messages')
-          .select('sender_id, receiver_id, is_read')
-          .or(`sender_id.eq.${curr.id},receiver_id.eq.${curr.id}`)
-          .order('created_at', { ascending: false });
+        // 2. Fetch ALL users first
+        const { data: usersData } = await supabase.from('users').select('*');
+        const usersList = usersData || [];
+        setAllUsers(usersList);
 
-        if (msgData) {
-          const participantIds = new Set<string>();
-          const unreads: Record<string, number> = {};
-          
-          msgData.forEach((m: any) => {
-            // Ensure we are dealing with strings for the Set
-            const sId = String(m.sender_id);
-            const rId = String(m.receiver_id);
-            const cId = String(curr.id);
+        // 3. Fetch messages where you are either sender or receiver
+        // Using a simpler query format to avoid any .or() issues
+        const { data: sentMsgs } = await supabase.from('messages').select('receiver_id, is_read, created_at').eq('sender_id', curr.id);
+        const { data: receivedMsgs } = await supabase.from('messages').select('sender_id, is_read, created_at').eq('receiver_id', curr.id);
 
-            const otherId = sId === cId ? rId : sId;
+        const allMsgs = [...(sentMsgs || []), ...(receivedMsgs || [])];
+        
+        // Sort by most recent
+        allMsgs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+        const participantIds = new Set<string>();
+        const unreads: Record<string, number> = {};
+        
+        allMsgs.forEach((m: any) => {
+          const otherId = String(m.sender_id || m.receiver_id);
+          if (otherId !== String(curr.id)) {
             participantIds.add(otherId);
-            
-            // Unread logic
-            if (rId === cId && !m.is_read) {
+            if (m.sender_id && !m.is_read) {
               unreads[otherId] = (unreads[otherId] || 0) + 1;
             }
-          });
+          }
+        });
 
-          // Filter users who are in our participant list
-          const recents = usersList.filter(u => participantIds.has(String(u.id)));
-          
-          // Sort recents based on the order of participantIds (most recent first)
-          const sortedRecents = Array.from(participantIds)
-            .map(id => recents.find(u => String(u.id) === id))
-            .filter(Boolean);
+        // Map IDs back to user objects
+        const recents = Array.from(participantIds)
+          .map(id => usersList.find(u => String(u.id) === id))
+          .filter(Boolean);
 
-          setRecentUsers(sortedRecents);
-          setUnreadCounts(unreads);
-        }
+        setRecentUsers(recents as any[]);
+        setUnreadCounts(unreads);
+      } catch (err) {
+        console.error("Fetch Error:", err);
       }
     };
     fetchData();
