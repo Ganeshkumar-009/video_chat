@@ -177,6 +177,18 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
   );
 }
 
+function getTimeAgo(dateStr: string) {
+  if (!dateStr) return 'Offline';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} day${days > 1 ? 's' : ''} ago`;
+}
+
 function UserItem({ user, isSelected, onClick, unreadCount }: { user: any, isSelected: boolean, onClick: () => void, unreadCount: number }) {
   return (
     <div 
@@ -209,7 +221,7 @@ function UserItem({ user, isSelected, onClick, unreadCount }: { user: any, isSel
         </div>
         <div className="flex items-center justify-between">
           <div className={`text-[13px] truncate ${isSelected ? 'text-purple-300/70' : 'text-gray-500 group-hover:text-gray-400'}`}>
-            {user.status === 'online' ? 'Active now' : 'Last seen recently'}
+            {user.status === 'online' ? 'Active now' : `Last seen ${getTimeAgo(user.last_seen)}`}
           </div>
           {unreadCount > 0 && (
             <div className="bg-green-500 text-black text-[11px] font-black min-w-[22px] h-[22px] px-1 rounded-full flex items-center justify-center shadow-lg shadow-green-500/40 animate-pulse">

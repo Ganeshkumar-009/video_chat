@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import FriendList from '@/components/FriendList';
 import ChatBox from '@/components/ChatBox';
+import { decryptMessage } from '@/lib/crypto';
 
 export default function Dashboard() {
   const [user, setUser] = useState<any>(null);
@@ -19,7 +20,11 @@ export default function Dashboard() {
       setUser(parsedUser);
       
       // 1. Mark as Online
-      supabase.from('users').update({ status: 'online' }).eq('id', parsedUser.id).then();
+      supabase.from('users').update({ status: 'online', last_seen: new Date().toISOString() }).eq('id', parsedUser.id).then();
+      
+      const presenceInterval = setInterval(() => {
+        supabase.from('users').update({ last_seen: new Date().toISOString() }).eq('id', parsedUser.id).then();
+      }, 60000);
 
       // 2. Setup Global Message Listener for Notifications (Super Reliable)
       const channel = supabase
@@ -33,8 +38,9 @@ export default function Dashboard() {
           // Only notify if YOU are the receiver
           if (String(newMsg.receiver_id) === String(parsedUser.id)) {
             // Trigger Flutter Notification
+            const decryptedContent = decryptMessage(newMsg.content, newMsg.room_id);
             if ((window as any).NotificationChannel) {
-              (window as any).NotificationChannel.postMessage(`${newMsg.sender_username}: ${newMsg.content}`);
+              (window as any).NotificationChannel.postMessage(`${newMsg.sender_username}: ${decryptedContent}`);
             }
           }
         })
@@ -42,11 +48,12 @@ export default function Dashboard() {
 
       // 3. Set Offline on Close
       const handleTabClose = () => {
-        supabase.from('users').update({ status: 'offline' }).eq('id', parsedUser.id).then();
+        supabase.from('users').update({ status: 'offline', last_seen: new Date().toISOString() }).eq('id', parsedUser.id).then();
       };
       window.addEventListener('beforeunload', handleTabClose);
 
       return () => {
+        clearInterval(presenceInterval);
         supabase.removeChannel(channel);
         window.removeEventListener('beforeunload', handleTabClose);
       };

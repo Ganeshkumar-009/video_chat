@@ -10,20 +10,22 @@
     "export": "next build && next export"
   },
   "dependencies": {
-    "next": "14.0.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
+    "@supabase/supabase-js": "^2.45.0",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
-    "@supabase/supabase-js": "^2.45.0",
-    "socket.io-client": "^4.7.5",
-    "react-hot-toast": "^2.4.1",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
+    "crypto-js": "^4.2.0",
+    "next": "14.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-hot-toast": "^2.4.1",
+    "socket.io-client": "^4.7.5",
     "tailwind-merge": "^2.2.1"
   },
   "devDependencies": {
+    "@types/crypto-js": "^4.2.2",
     "autoprefixer": "^10.0.1",
     "eslint": "^8",
     "eslint-config-next": "14.0.0",

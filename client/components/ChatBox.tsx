@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 import { supabase } from '@/lib/supabase';
 import toast from 'react-hot-toast';
+import { encryptMessage, decryptMessage } from '@/lib/crypto';
 
 interface ChatBoxProps {
   recipient: any;
@@ -32,7 +33,7 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
       if (!error && data) {
         setMessages(data.map(m => ({
           id: m.id,
-          text: m.content,
+          text: decryptMessage(m.content, roomId),
           user: m.sender_username,
           timestamp: m.created_at,
           room: m.room_id,
@@ -62,7 +63,7 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
         // Only add if it's from the OTHER user (since we add ours optimistically)
         if (newMsg.sender_username !== currentUser.username) {
           setMessages(prev => [...prev, {
-            text: newMsg.content,
+            text: decryptMessage(newMsg.content, roomId),
             user: newMsg.sender_username,
             timestamp: newMsg.created_at,
             room: newMsg.room_id
@@ -114,7 +115,7 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
         room_id: roomId,
         sender_id: currentUser.id,
         sender_username: currentUser.username,
-        content: message,
+        content: encryptMessage(message, roomId),
         receiver_id: recipient.id,
         is_read: false
       }]);
