@@ -140,7 +140,7 @@ export default function Login() {
                     Username
                   </label>
                   <input
-                    type="email"
+                    type="text"
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
