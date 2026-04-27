@@ -128,6 +128,12 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
     setMessage('');
   };
 
+  const handleClearChat = async () => {
+    await supabase.from('messages').delete().eq('room_id', roomId);
+    setMessages([]);
+    setIsMenuOpen(false);
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
