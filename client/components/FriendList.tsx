@@ -151,37 +151,18 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
 
   return (
     <div className="flex flex-col h-full">
-      <div className="p-4 bg-transparent">
+      <div className="p-4">
         {longPressedUserId ? (
-          <div className="flex items-center justify-between bg-[#202C33] rounded-xl px-4 py-3 animate-in fade-in slide-in-from-top-2 duration-200 shadow-xl border border-white/[0.05]">
-            <div className="flex items-center gap-5">
-              <button onClick={() => setLongPressedUserId(null)} className="text-gray-400 hover:text-white transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+          <div className="flex items-center justify-between bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-2.5 animate-in fade-in duration-200">
+            <div className="flex items-center gap-3">
+              <button onClick={() => setLongPressedUserId(null)} className="text-gray-400 hover:text-white">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
               </button>
-              <span className="text-white text-[18px] font-semibold">1</span>
+              <span className="text-white text-[15px] font-medium">1 Selected</span>
             </div>
-            <div className="flex items-center gap-5 text-gray-300">
-              {/* Pin Icon */}
-              <button className="hover:text-white transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.68V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3v4.68a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg>
-              </button>
-              {/* Trash Icon (Active) */}
-              <button onClick={handleDeleteChat} className="hover:text-red-400 transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-              </button>
-              {/* Mute Icon */}
-              <button className="hover:text-white transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5Z"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
-              </button>
-              {/* Archive Icon */}
-              <button className="hover:text-white transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="12" y2="16"/><line x1="16" y1="12" x2="12" y2="16"/></svg>
-              </button>
-              {/* Menu Dots */}
-              <button className="hover:text-white transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
-              </button>
-            </div>
+            <button onClick={handleDeleteChat} className="text-red-400 hover:text-red-300 flex items-center gap-1.5 p-1">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+            </button>
           </div>
         ) : (
           <div className="relative group">
@@ -273,16 +254,9 @@ function getTimeAgo(dateStr: string) {
 }
 
 function UserItem({ user, isSelected, isLongPressed, onClick, onLongPress, unreadCount }: { user: any, isSelected: boolean, isLongPressed: boolean, onClick: () => void, onLongPress: () => void, unreadCount: number }) {
-  const [now, setNow] = useState(Date.now());
-  
-  // Force component to re-evaluate "time ago" every 30 seconds
-  useEffect(() => {
-    const interval = setInterval(() => setNow(Date.now()), 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // A user is truly online if they are marked online AND have sent a heartbeat in the last 2 minutes
-  const isOnline = user.status === 'online' && (!user.last_seen || now - new Date(user.last_seen).getTime() < 120000);
+  // Trust the database status directly, since mobile visibilitychange keeps it perfectly accurate
+  // This bypasses any clock desync issues between different phones
+  const isOnline = user.status === 'online';
 
   let pressTimer: any;
   const handleTouchStart = () => {
@@ -317,6 +291,7 @@ function UserItem({ user, isSelected, isLongPressed, onClick, onLongPress, unrea
         }`}>
           {user.username?.[0]?.toUpperCase()}
         </div>
+        <div className={`absolute bottom-0 right-1 w-3.5 h-3.5 border-[3px] border-[#0a0a0b] rounded-full ${isOnline ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-gray-600'}`}></div>
       </div>
 
       <div className="flex-1 min-w-0">
@@ -331,10 +306,8 @@ function UserItem({ user, isSelected, isLongPressed, onClick, onLongPress, unrea
           </span>
         </div>
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1 text-[13px] text-gray-500 truncate">
-            {/* WhatsApp read receipt checkmarks (mocked for visual accuracy) */}
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-400"><path d="M18 6 7 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/></svg>
-            <span>Tap to view messages</span>
+          <div className={`text-[13px] truncate ${isSelected ? 'text-purple-300/70' : 'text-gray-500 group-hover:text-gray-400'}`}>
+            {isOnline ? 'Active now' : `Last seen ${getTimeAgo(user.last_seen)}`}
           </div>
           {unreadCount > 0 && (
             <div className="bg-green-500 text-black text-[11px] font-black min-w-[22px] h-[22px] px-1 rounded-full flex items-center justify-center shadow-lg shadow-green-500/40 animate-pulse">
