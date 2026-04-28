@@ -291,7 +291,6 @@ function UserItem({ user, isSelected, isLongPressed, onClick, onLongPress, unrea
         }`}>
           {user.username?.[0]?.toUpperCase()}
         </div>
-        <div className={`absolute bottom-0 right-1 w-3.5 h-3.5 border-[3px] border-[#0a0a0b] rounded-full ${isOnline ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-gray-600'}`}></div>
       </div>
 
       <div className="flex-1 min-w-0">
@@ -307,7 +306,7 @@ function UserItem({ user, isSelected, isLongPressed, onClick, onLongPress, unrea
         </div>
         <div className="flex items-center justify-between">
           <div className={`text-[13px] truncate ${isSelected ? 'text-purple-300/70' : 'text-gray-500 group-hover:text-gray-400'}`}>
-            {isOnline ? 'Active now' : `Last seen ${getTimeAgo(user.last_seen)}`}
+            Tap to chat...
           </div>
           {unreadCount > 0 && (
             <div className="bg-green-500 text-black text-[11px] font-black min-w-[22px] h-[22px] px-1 rounded-full flex items-center justify-center shadow-lg shadow-green-500/40 animate-pulse">

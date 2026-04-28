@@ -99,10 +99,6 @@ export default function Dashboard() {
             </div>
             <div>
               <h1 className="font-bold text-white truncate max-w-[120px]">{user?.username}</h1>
-              <div className="flex items-center gap-1.5">
-                <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]"></div>
-                <span className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold">Online</span>
-              </div>
             </div>
           </div>
           <button 
