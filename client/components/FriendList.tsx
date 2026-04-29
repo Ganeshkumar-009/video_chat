@@ -38,8 +38,8 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
         setAllUsers(usersList);
 
         // 3. Fetch messages where you are either sender or receiver
-        const { data: sentMsgs } = await supabase.from('messages').select('receiver_id, is_read, created_at, content').eq('sender_id', curr.id);
-        const { data: receivedMsgs } = await supabase.from('messages').select('sender_id, is_read, created_at, content').eq('receiver_id', curr.id);
+        const { data: sentMsgs } = await supabase.from('messages').select('sender_id, receiver_id, is_read, created_at, content').eq('sender_id', curr.id);
+        const { data: receivedMsgs } = await supabase.from('messages').select('sender_id, receiver_id, is_read, created_at, content').eq('receiver_id', curr.id);
 
         const allMsgs = [...(sentMsgs || []), ...(receivedMsgs || [])];
         
