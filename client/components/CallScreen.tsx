@@ -7,19 +7,21 @@ interface CallScreenProps {
   recipient: any;
   currentUser: any;
   roomId: string;
-  socket: any;
+  channel: any;
   initialCallType: string;
   onEndCall: () => void;
 }
 
-export default function CallScreen({ recipient, currentUser, roomId, socket, initialCallType, onEndCall }: CallScreenProps) {
-  const [callStatus, setCallStatus] = useState('calling'); 
+export default function CallScreen({ recipient, currentUser, roomId, channel, initialCallType, onEndCall }: CallScreenProps) {
+  const [callStatus, setCallStatus] = useState('calling');  
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(initialCallType === 'audio' || initialCallType === 'incoming-audio');
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const peerConnection = useRef<RTCPeerConnection | null>(null);
   const localStream = useRef<MediaStream | null>(null);
+  const callStartTime = useRef<number | null>(null);
+  const activeMessageId = useRef<string | null>(null);
 
   useEffect(() => {
     let isInitiator = !initialCallType.startsWith('incoming');
@@ -56,72 +58,73 @@ export default function CallScreen({ recipient, currentUser, roomId, socket, ini
 
         pc.onicecandidate = (event) => {
           if (event.candidate) {
-            socket.emit('ice-candidate', { room: roomId, candidate: event.candidate });
+            channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'ice-candidate', room: roomId, candidate: event.candidate } });
           }
         };
 
-        const handleOffer = async (offer: any) => {
-          if (isInitiator) return;
-          try {
-             await pc.setRemoteDescription(new RTCSessionDescription(offer));
-             const answer = await pc.createAnswer();
-             await pc.setLocalDescription(answer);
-             socket.emit('answer', { room: roomId, answer });
-          } catch(e) { console.error('Offer error:', e); }
+        const handleBroadcast = async ({ payload }: any) => {
+          if (payload.room !== roomId) return;
+
+          if (payload.type === 'offer' && !isInitiator) {
+             try {
+                await pc.setRemoteDescription(new RTCSessionDescription(payload.offer));
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'answer', room: roomId, answer } });
+             } catch(e) { console.error('Offer error:', e); }
+          }
+          
+          if (payload.type === 'answer') {
+             try {
+                await pc.setRemoteDescription(new RTCSessionDescription(payload.answer));
+             } catch(e) { console.error('Answer error:', e); }
+          }
+
+          if (payload.type === 'ice-candidate') {
+             try {
+                await pc.addIceCandidate(new RTCIceCandidate(payload.candidate));
+             } catch(e) { console.error('ICE error:', e); }
+          }
+
+          if (payload.type === 'call-signal') {
+             if (payload.signal === 'call-accepted' && isInitiator) {
+                try {
+                   callStartTime.current = Date.now();
+                   const offer = await pc.createOffer();
+                   await pc.setLocalDescription(offer);
+                   channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'offer', room: roomId, offer } });
+                } catch(e) { console.error('Create offer error:', e); }
+             }
+             if (payload.signal === 'call-accepted' && !isInitiator) {
+                callStartTime.current = Date.now();
+             }
+             if (payload.signal === 'call-ended') {
+                endCallLocally();
+             }
+          }
         };
 
-        const handleAnswer = async (answer: any) => {
-          try {
-             await pc.setRemoteDescription(new RTCSessionDescription(answer));
-          } catch(e) { console.error('Answer error:', e); }
-        };
-
-        const handleIceCandidate = async (candidate: any) => {
-          try {
-             await pc.addIceCandidate(new RTCIceCandidate(candidate));
-          } catch(e) { console.error('ICE error:', e); }
-        };
-
-        const handleChatMessage = async (msg: any) => {
-           if (msg.type === 'call-signal' && msg.room === roomId) {
-              if (msg.signal === 'call-accepted' && isInitiator) {
-                 try {
-                    const offer = await pc.createOffer();
-                    await pc.setLocalDescription(offer);
-                    socket.emit('offer', { room: roomId, offer });
-                 } catch(e) { console.error('Create offer error:', e); }
-              }
-              if (msg.signal === 'call-ended') {
-                 endCallLocally();
-              }
-           }
-        };
-
-        socket.on('offer', handleOffer);
-        socket.on('answer', handleAnswer);
-        socket.on('ice-candidate', handleIceCandidate);
-        socket.on('chat-message', handleChatMessage);
-
-        // Save handlers to ref so we can remove them in cleanup
-        (socket as any)._offerHandler = handleOffer;
-        (socket as any)._answerHandler = handleAnswer;
-        (socket as any)._iceHandler = handleIceCandidate;
-        (socket as any)._chatHandler = handleChatMessage;
+        channel.on('broadcast', { event: 'webrtc' }, handleBroadcast);
+        (channel as any)._webrtcHandler = handleBroadcast;
 
         if (isInitiator) {
           const payloadStr = JSON.stringify({
              text: `📞 ${type === 'video' ? 'Video' : 'Audio'} Call`,
-             callData: { type, status: 'ringing' }
+             callData: { type, status: 'ringing', isVideo: type === 'video' }
           });
           
-          await supabase.from('messages').insert([{
+          const { data, error } = await supabase.from('messages').insert([{
              room_id: roomId,
              sender_id: currentUser.id,
              sender_username: currentUser.username,
              content: encryptMessage(payloadStr, roomId),
              receiver_id: recipient.id,
              is_read: false
-          }]);
+          }]).select();
+
+          if (data && data.length > 0) {
+             activeMessageId.current = data[0].id;
+          }
           
           const { data: userData } = await supabase.from('users').select('fcm_token').eq('id', recipient.id).single();
           if (userData?.fcm_token) {
@@ -136,7 +139,7 @@ export default function CallScreen({ recipient, currentUser, roomId, socket, ini
             });
           }
         } else {
-          socket.emit('chat-message', { room: roomId, type: 'call-signal', signal: 'call-accepted' });
+          channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'call-signal', room: roomId, signal: 'call-accepted' } });
         }
 
       } catch (err) {
@@ -150,21 +153,40 @@ export default function CallScreen({ recipient, currentUser, roomId, socket, ini
     return () => endCallLocally();
   }, []);
 
-  const endCallLocally = () => {
+  const endCallLocally = async () => {
     localStream.current?.getTracks().forEach(t => t.stop());
     peerConnection.current?.close();
     
     // Cleanup socket listeners
-    if ((socket as any)._offerHandler) socket.off('offer', (socket as any)._offerHandler);
-    if ((socket as any)._answerHandler) socket.off('answer', (socket as any)._answerHandler);
-    if ((socket as any)._iceHandler) socket.off('ice-candidate', (socket as any)._iceHandler);
-    if ((socket as any)._chatHandler) socket.off('chat-message', (socket as any)._chatHandler);
+    if ((channel as any)._webrtcHandler) {
+      // Supabase realtime doesn't have an exact `.off` for specific broadcasts, but we can ignore it by setting it to null
+      (channel as any)._webrtcHandler = () => {}; 
+    }
+
+    // Update DB with duration if initiator
+    if (activeMessageId.current) {
+       let durationStr = "0s";
+       if (callStartTime.current) {
+          const secs = Math.floor((Date.now() - callStartTime.current) / 1000);
+          if (secs > 60) durationStr = `${Math.floor(secs/60)}m ${secs%60}s`;
+          else durationStr = `${secs}s`;
+       }
+       
+       const endPayloadStr = JSON.stringify({
+          text: `Call ended (${durationStr})`,
+          callData: { type: initialCallType.replace('incoming-', ''), status: 'ended', duration: durationStr }
+       });
+
+       await supabase.from('messages').update({
+          content: encryptMessage(endPayloadStr, roomId)
+       }).eq('id', activeMessageId.current);
+    }
 
     onEndCall();
   };
 
   const handleHangup = () => {
-    socket.emit('chat-message', { room: roomId, type: 'call-signal', signal: 'call-ended' });
+    channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'call-signal', room: roomId, signal: 'call-ended' } });
     endCallLocally();
   };
 

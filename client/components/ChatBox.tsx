@@ -1,6 +1,5 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
-import { io } from 'socket.io-client';
 import { supabase } from '@/lib/supabase';
 import toast from 'react-hot-toast';
 import { encryptMessage, decryptMessage } from '@/lib/crypto';
@@ -24,7 +23,7 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
   const [swipeOffset, setSwipeOffset] = useState<Record<string, number>>({});
   const [activeCallType, setActiveCallType] = useState<string | null>(recipient.incomingCallType ? `incoming-${recipient.incomingCallType}` : null);
   
-  const socketRef = useRef<any>(null);
+  const channelRef = useRef<any>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -134,8 +133,7 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
       })
       .subscribe();
 
-    socketRef.current = io(process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000');
-    socketRef.current.emit('join-room', roomId, currentUser.id);
+    channelRef.current = channel;
 
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -146,7 +144,6 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
 
     return () => {
       supabase.removeChannel(channel);
-      socketRef.current?.disconnect();
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [roomId, currentUser.id]);
@@ -215,8 +212,6 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
         }
       } catch (pushErr) {}
     }
-
-    socketRef.current.emit('chat-message', msgData);
   };
 
   const handleClearChat = async () => {
@@ -284,8 +279,6 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
         receiver_id: recipient.id,
         is_read: false
       }]);
-
-      socketRef.current.emit('chat-message', msgData);
 
       const { data: userData } = await supabase.from('users').select('fcm_token').eq('id', recipient.id).single();
       if (userData?.fcm_token) {
@@ -491,22 +484,26 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
                       <div className="flex flex-col pb-[14px] pr-2 pt-1 min-w-[180px]">
                         <div className="flex items-center gap-3 mb-3">
                           <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isOwn ? 'bg-white/20' : 'bg-purple-500/20 text-purple-400'}`}>
-                            {msg.text?.includes('Video') ? (
+                            {msg.text?.includes('Video') || msg.callData?.isVideo || msg.callData?.type === 'video' ? (
                               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.934a.5.5 0 0 0-.777-.416L16 11"/><rect width="14" height="12" x="2" y="6" rx="2"/></svg>
                             ) : (
                               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
                             )}
                           </div>
                           <div className="flex flex-col">
-                            <span className="font-bold text-[15px]">{msg.text?.includes('Video') ? 'Video Call' : 'Audio Call'}</span>
-                            <span className={`text-[12px] ${isOwn ? 'text-white/70' : 'text-gray-400'}`}>Tap to join</span>
+                            <span className="font-bold text-[15px]">{(msg.text?.includes('Video') || msg.callData?.isVideo || msg.callData?.type === 'video') ? 'Video Call' : 'Audio Call'}</span>
+                            <span className={`text-[12px] ${isOwn ? 'text-white/70' : 'text-gray-400'}`}>
+                              {msg.callData?.status === 'ended' 
+                                ? `Ended ${msg.callData.duration ? `(${msg.callData.duration})` : ''}` 
+                                : 'Tap to join'}
+                            </span>
                           </div>
                         </div>
-                        {!isOwn && (
+                        {(!isOwn && msg.callData?.status !== 'ended') && (
                           <button 
                             onClick={(e) => {
                                e.stopPropagation();
-                               setActiveCallType(`incoming-${msg.text?.includes('Video') ? 'video' : 'audio'}`);
+                               setActiveCallType(`incoming-${(msg.text?.includes('Video') || msg.callData?.isVideo || msg.callData?.type === 'video') ? 'video' : 'audio'}`);
                             }}
                             className="w-full py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-xl font-bold text-sm transition-colors"
                           >
@@ -661,12 +658,12 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
         </div>
       )}
 
-      {activeCallType && socketRef.current && (
+      {activeCallType && channelRef.current && (
         <CallScreen 
           recipient={recipient}
           currentUser={currentUser}
           roomId={roomId}
-          socket={socketRef.current}
+          channel={channelRef.current}
           initialCallType={activeCallType}
           onEndCall={() => setActiveCallType(null)}
         />
