@@ -150,7 +150,7 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
 
     setupMedia();
 
-    return () => endCallLocally();
+    return () => { endCallLocally(); };
   }, []);
 
   const endCallLocally = async () => {
