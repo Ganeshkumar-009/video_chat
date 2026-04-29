@@ -123,6 +123,13 @@ class _WebviewScreenState extends State<WebviewScreen> {
     if (controller.platform is AndroidWebViewController) {
       AndroidWebViewController.enableDebugging(true);
       (controller.platform as AndroidWebViewController).setMediaPlaybackRequiresUserGesture(false);
+      
+      // EXPLICITLY GRANT WEBRTC CAMERA/MIC PERMISSIONS
+      (controller.platform as AndroidWebViewController).setOnPlatformPermissionRequest(
+        (PlatformWebViewPermissionRequest request) {
+          request.grant();
+        },
+      );
           
       // THE NATIVE BRIDGE FOR CAMERA, GALLERY, AND FILES
       (controller.platform as AndroidWebViewController).setOnShowFileSelector(
@@ -171,14 +178,23 @@ class _WebviewScreenState extends State<WebviewScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0B),
-      body: SafeArea(
-        child: Stack(
-          children: [
-            WebViewWidget(controller: _controller),
-            if (_isLoading) const Center(child: CircularProgressIndicator(color: Colors.purple)),
-          ],
+    return WillPopScope(
+      onWillPop: () async {
+        if (await _controller.canGoBack()) {
+          _controller.goBack();
+          return false; // Prevent app exit
+        }
+        return true; // Exit app if no history
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFF0A0A0B),
+        body: SafeArea(
+          child: Stack(
+            children: [
+              WebViewWidget(controller: _controller),
+              if (_isLoading) const Center(child: CircularProgressIndicator(color: Colors.purple)),
+            ],
+          ),
         ),
       ),
     );
