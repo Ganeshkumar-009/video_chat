@@ -71,8 +71,13 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
         const decryptPreview = (text: string, roomId: string) => {
           if (!text) return '';
           try {
-            const dec = decryptMessage(text, roomId);
-            if (dec.includes('chat-media')) {
+            let dec = decryptMessage(text, roomId);
+            try {
+              const json = JSON.parse(dec);
+              if (json.text !== undefined) dec = json.text;
+            } catch(e) {}
+            
+            if (dec.includes('chat-media') || dec.match(/\.(jpeg|jpg|gif|png|webp|mp4|webm|mov)/i)) {
               return dec.match(/\.(mp4|webm|mov)/i) ? '🎥 Video' : '📷 Photo';
             }
             return dec;
@@ -128,8 +133,15 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
         setRecentUsers(prev => prev.map(u => {
           if (String(u.id) === String(newMsg.sender_id) || String(u.id) === String(newMsg.receiver_id)) {
             const roomId = [curr.id, u.id].sort().join('--');
-            const decText = decryptMessage(newMsg.content, roomId);
-            const preview = decText.includes('chat-media') ? (decText.match(/\.(mp4|webm|mov)/i) ? '🎥 Video' : '📷 Photo') : decText;
+            let decText = decryptMessage(newMsg.content, roomId);
+            try {
+              const json = JSON.parse(decText);
+              if (json.text !== undefined) decText = json.text;
+            } catch(e) {}
+            
+            const preview = (decText.includes('chat-media') || decText.match(/\.(jpeg|jpg|gif|png|webp|mp4|webm|mov)/i)) 
+              ? (decText.match(/\.(mp4|webm|mov)/i) ? '🎥 Video' : '📷 Photo') 
+              : decText;
             return { ...u, lastMessageText: preview, lastMessageTime: newMsg.created_at };
           }
           return u;
