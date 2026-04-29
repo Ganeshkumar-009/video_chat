@@ -11,9 +11,7 @@ export default function Home() {
   }, [router]);
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center p-24">
-      <h1 className="text-5xl font-bold">Loading...</h1>
-    </div>
+    <div className="min-h-screen bg-[#0a0a0b]"></div>
   );
 }
 
