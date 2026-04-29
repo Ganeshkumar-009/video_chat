@@ -33,14 +33,16 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
   const parseMessageContent = (encryptedContent: string, roomId: string) => {
     let parsedText = decryptMessage(encryptedContent, roomId);
     let replyData = null;
+    let callData = null;
     try {
       const json = JSON.parse(parsedText);
       if (json.text !== undefined) {
         parsedText = json.text;
         replyData = json.replyTo;
+        callData = json.callData;
       }
     } catch(e) {}
-    return { text: parsedText, replyTo: replyData };
+    return { text: parsedText, replyTo: replyData, callData };
   };
 
   useEffect(() => {
@@ -75,6 +77,7 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
             id: m.id,
             text: parsed.text,
             replyTo: parsed.replyTo,
+            callData: parsed.callData,
             user: m.sender_username,
             timestamp: m.created_at,
             room: m.room_id,
@@ -110,6 +113,7 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
               id: newMsg.id,
               text: parsed.text,
               replyTo: parsed.replyTo,
+              callData: parsed.callData,
               user: newMsg.sender_username,
               timestamp: newMsg.created_at,
               room: newMsg.room_id
@@ -482,6 +486,33 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
                     ) : isVideo ? (
                       <div className="pb-4">
                          <video src={msg.text} controls className="max-w-full rounded-lg my-1" />
+                      </div>
+                    ) : (msg.callData || msg.text?.includes('📞')) ? (
+                      <div className="flex flex-col pb-[14px] pr-2 pt-1 min-w-[180px]">
+                        <div className="flex items-center gap-3 mb-3">
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isOwn ? 'bg-white/20' : 'bg-purple-500/20 text-purple-400'}`}>
+                            {msg.text?.includes('Video') ? (
+                              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.934a.5.5 0 0 0-.777-.416L16 11"/><rect width="14" height="12" x="2" y="6" rx="2"/></svg>
+                            ) : (
+                              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                            )}
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="font-bold text-[15px]">{msg.text?.includes('Video') ? 'Video Call' : 'Audio Call'}</span>
+                            <span className={`text-[12px] ${isOwn ? 'text-white/70' : 'text-gray-400'}`}>Tap to join</span>
+                          </div>
+                        </div>
+                        {!isOwn && (
+                          <button 
+                            onClick={(e) => {
+                               e.stopPropagation();
+                               setActiveCallType(`incoming-${msg.text?.includes('Video') ? 'video' : 'audio'}`);
+                            }}
+                            className="w-full py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-xl font-bold text-sm transition-colors"
+                          >
+                            Join Call
+                          </button>
+                        )}
                       </div>
                     ) : (
                       <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words pb-[14px] pr-2">{msg.text}</p>

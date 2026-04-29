@@ -35,7 +35,13 @@ export default function CallScreen({ recipient, currentUser, roomId, socket, ini
         if (localVideoRef.current) localVideoRef.current.srcObject = stream;
 
         const pc = new RTCPeerConnection({
-           iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+           iceServers: [
+             { urls: 'stun:stun.l.google.com:19302' },
+             { urls: 'stun:stun1.l.google.com:19302' },
+             { urls: 'stun:stun2.l.google.com:19302' },
+             { urls: 'stun:stun3.l.google.com:19302' },
+             { urls: 'stun:stun4.l.google.com:19302' },
+           ]
         });
         peerConnection.current = pc;
 
@@ -54,36 +60,53 @@ export default function CallScreen({ recipient, currentUser, roomId, socket, ini
           }
         };
 
-        socket.on('offer', async (offer: any) => {
+        const handleOffer = async (offer: any) => {
           if (isInitiator) return;
-          await pc.setRemoteDescription(new RTCSessionDescription(offer));
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          socket.emit('answer', { room: roomId, answer });
-        });
+          try {
+             await pc.setRemoteDescription(new RTCSessionDescription(offer));
+             const answer = await pc.createAnswer();
+             await pc.setLocalDescription(answer);
+             socket.emit('answer', { room: roomId, answer });
+          } catch(e) { console.error('Offer error:', e); }
+        };
 
-        socket.on('answer', async (answer: any) => {
-          await pc.setRemoteDescription(new RTCSessionDescription(answer));
-        });
+        const handleAnswer = async (answer: any) => {
+          try {
+             await pc.setRemoteDescription(new RTCSessionDescription(answer));
+          } catch(e) { console.error('Answer error:', e); }
+        };
 
-        socket.on('ice-candidate', async (candidate: any) => {
+        const handleIceCandidate = async (candidate: any) => {
           try {
              await pc.addIceCandidate(new RTCIceCandidate(candidate));
-          } catch(e){}
-        });
+          } catch(e) { console.error('ICE error:', e); }
+        };
 
-        socket.on('chat-message', async (msg: any) => {
+        const handleChatMessage = async (msg: any) => {
            if (msg.type === 'call-signal' && msg.room === roomId) {
               if (msg.signal === 'call-accepted' && isInitiator) {
-                 const offer = await pc.createOffer();
-                 await pc.setLocalDescription(offer);
-                 socket.emit('offer', { room: roomId, offer });
+                 try {
+                    const offer = await pc.createOffer();
+                    await pc.setLocalDescription(offer);
+                    socket.emit('offer', { room: roomId, offer });
+                 } catch(e) { console.error('Create offer error:', e); }
               }
               if (msg.signal === 'call-ended') {
                  endCallLocally();
               }
            }
-        });
+        };
+
+        socket.on('offer', handleOffer);
+        socket.on('answer', handleAnswer);
+        socket.on('ice-candidate', handleIceCandidate);
+        socket.on('chat-message', handleChatMessage);
+
+        // Save handlers to ref so we can remove them in cleanup
+        (socket as any)._offerHandler = handleOffer;
+        (socket as any)._answerHandler = handleAnswer;
+        (socket as any)._iceHandler = handleIceCandidate;
+        (socket as any)._chatHandler = handleChatMessage;
 
         if (isInitiator) {
           const payloadStr = JSON.stringify({
@@ -130,6 +153,13 @@ export default function CallScreen({ recipient, currentUser, roomId, socket, ini
   const endCallLocally = () => {
     localStream.current?.getTracks().forEach(t => t.stop());
     peerConnection.current?.close();
+    
+    // Cleanup socket listeners
+    if ((socket as any)._offerHandler) socket.off('offer', (socket as any)._offerHandler);
+    if ((socket as any)._answerHandler) socket.off('answer', (socket as any)._answerHandler);
+    if ((socket as any)._iceHandler) socket.off('ice-candidate', (socket as any)._iceHandler);
+    if ((socket as any)._chatHandler) socket.off('chat-message', (socket as any)._chatHandler);
+
     onEndCall();
   };
 
