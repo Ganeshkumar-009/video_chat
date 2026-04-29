@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
+import { decryptMessage } from '@/lib/crypto';
 
 interface FriendListProps {
   onSelectUser: (user: any) => void;
@@ -67,11 +68,11 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
         });
 
         // Decrypt helper for previews
-        const decryptPreview = (text: string) => {
+        const decryptPreview = (text: string, roomId: string) => {
           if (!text) return '';
           try {
-            const dec = text.split('').map(c => String.fromCharCode(c.charCodeAt(0) - 5)).join('');
-            if (dec.includes('supabase.co/storage/v1/object/public/chat-media')) {
+            const dec = decryptMessage(text, roomId);
+            if (dec.includes('chat-media')) {
               return dec.match(/\.(mp4|webm|mov)/i) ? '🎥 Video' : '📷 Photo';
             }
             return dec;
@@ -91,9 +92,11 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
               (String(m.sender_id) === String(curr.id) && String(m.receiver_id) === id)
             );
 
+            const roomId = [curr.id, id].sort().join('--');
+
             return {
               ...u,
-              lastMessageText: lastMsg ? decryptPreview(lastMsg.content) : null,
+              lastMessageText: lastMsg ? decryptPreview(lastMsg.content, roomId) : null,
               lastMessageTime: lastMsg ? lastMsg.created_at : null
             };
           })
@@ -113,17 +116,20 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
       .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, (payload) => {
         const updatedUser = payload.new as any;
         setAllUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
-        setRecentUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
+        setRecentUsers(prev => prev.map(u => u.id === updatedUser.id ? {
+          ...updatedUser,
+          lastMessageText: u.lastMessageText,
+          lastMessageTime: u.lastMessageTime
+        } : u));
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
         const newMsg = payload.new as any;
         
-        // Decrypt for real-time update
-        const decText = newMsg.content ? newMsg.content.split('').map((c:string) => String.fromCharCode(c.charCodeAt(0) - 5)).join('') : '';
-        const preview = decText.includes('chat-media') ? (decText.match(/\.(mp4|webm|mov)/i) ? '🎥 Video' : '📷 Photo') : decText;
-
         setRecentUsers(prev => prev.map(u => {
           if (String(u.id) === String(newMsg.sender_id) || String(u.id) === String(newMsg.receiver_id)) {
+            const roomId = [curr.id, u.id].sort().join('--');
+            const decText = decryptMessage(newMsg.content, roomId);
+            const preview = decText.includes('chat-media') ? (decText.match(/\.(mp4|webm|mov)/i) ? '🎥 Video' : '📷 Photo') : decText;
             return { ...u, lastMessageText: preview, lastMessageTime: newMsg.created_at };
           }
           return u;
@@ -282,14 +288,16 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
 
 function getTimeAgo(dateStr: string) {
   if (!dateStr) return 'Offline';
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'Just now';
-  if (mins < 60) return `${mins} min ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
-  const days = Math.floor(hours / 24);
-  return `${days} day${days > 1 ? 's' : ''} ago`;
+  const date = new Date(dateStr);
+  const today = new Date();
+  
+  if (date.getDate() === today.getDate() && date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear()) {
+    // Format as 16:04
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+  }
+  
+  // If it's not today, return date
+  return date.toLocaleDateString([], { day: '2-digit', month: 'short' });
 }
 
 function UserItem({ user, isSelected, isLongPressed, onClick, onLongPress, unreadCount }: { user: any, isSelected: boolean, isLongPressed: boolean, onClick: () => void, onLongPress: () => void, unreadCount: number }) {
