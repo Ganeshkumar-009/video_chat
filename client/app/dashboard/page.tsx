@@ -9,7 +9,23 @@ import { decryptMessage } from '@/lib/crypto';
 export default function Dashboard() {
   const [user, setUser] = useState<any>(null);
   const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [incomingCall, setIncomingCall] = useState<any>(null);
   const router = useRouter();
+
+  const handleSelectUser = (u: any) => {
+    if (!selectedUser && u) {
+      window.history.pushState({ chatOpen: true }, '');
+    }
+    setSelectedUser(u);
+  };
+
+  useEffect(() => {
+    const handlePopState = () => {
+      setSelectedUser(null);
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [selectedUser]);
 
   useEffect(() => {
     const storedUser = localStorage.getItem('currentUser');
@@ -35,10 +51,22 @@ export default function Dashboard() {
           table: 'messages'
         }, (payload) => {
           const newMsg = payload.new;
-          // Only notify if YOU are the receiver
           if (String(newMsg.receiver_id) === String(parsedUser.id)) {
-            // Trigger Flutter Notification
             const decryptedContent = decryptMessage(newMsg.content, newMsg.room_id);
+            
+            try {
+              const json = JSON.parse(decryptedContent);
+              if (json.callData && json.callData.status === 'ringing') {
+                setIncomingCall({ 
+                  callerId: newMsg.sender_id, 
+                  username: newMsg.sender_username, 
+                  type: json.callData.type, 
+                  room: newMsg.room_id 
+                });
+                return; // Stop here, no need to push normal text notification
+              }
+            } catch(e) {}
+
             if ((window as any).NotificationChannel) {
               (window as any).NotificationChannel.postMessage(`${newMsg.sender_username}: ${decryptedContent}`);
             }
@@ -111,7 +139,7 @@ export default function Dashboard() {
         </div>
         
         <div className="flex-1 overflow-y-auto custom-scrollbar">
-          <FriendList onSelectUser={setSelectedUser} selectedUserId={selectedUser?.id} />
+          <FriendList onSelectUser={handleSelectUser} selectedUserId={selectedUser?.id} />
         </div>
       </aside>
 
@@ -121,7 +149,7 @@ export default function Dashboard() {
           <ChatBox 
             recipient={selectedUser} 
             currentUser={user} 
-            onBack={() => setSelectedUser(null)} 
+            onBack={() => window.history.back()} 
           />
         ) : (
           <div className="h-full flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-700">
@@ -135,6 +163,40 @@ export default function Dashboard() {
           </div>
         )}
       </main>
+
+      {/* Heads-up Incoming Call Notification */}
+      {incomingCall && (
+        <div className="absolute top-4 left-4 right-4 md:left-auto md:right-8 md:w-96 z-[999] bg-[#1a1a1c] border border-white/[0.1] shadow-2xl rounded-3xl p-4 animate-in slide-in-from-top-4 fade-in duration-300">
+           <div className="flex items-center gap-4 mb-5">
+              <div className="w-14 h-14 bg-gradient-to-tr from-purple-600 to-blue-600 rounded-full flex items-center justify-center font-bold text-white text-xl shadow-lg ring-4 ring-purple-500/20">
+                 {incomingCall.username?.[0]?.toUpperCase() || 'U'}
+              </div>
+              <div>
+                 <h3 className="text-white font-bold text-lg">{incomingCall.username}</h3>
+                 <p className="text-purple-400 text-sm font-medium animate-pulse">Incoming {incomingCall.type} call...</p>
+              </div>
+           </div>
+           <div className="flex items-center gap-3">
+              <button 
+                onClick={() => setIncomingCall(null)}
+                className="flex-1 py-3 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 font-bold rounded-2xl flex items-center justify-center gap-2 transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/><line x1="22" y1="2" x2="2" y2="22"/></svg>
+                Decline
+              </button>
+              <button 
+                onClick={() => {
+                   handleSelectUser({ id: incomingCall.callerId, username: incomingCall.username, incomingCallType: incomingCall.type });
+                   setIncomingCall(null);
+                }}
+                className="flex-1 py-3 bg-green-500 hover:bg-green-600 text-white shadow-lg shadow-green-500/20 font-bold rounded-2xl flex items-center justify-center gap-2 transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                Answer
+              </button>
+           </div>
+        </div>
+      )}
 
       <style jsx global>{`
         .custom-scrollbar::-webkit-scrollbar {

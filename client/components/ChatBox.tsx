@@ -4,6 +4,7 @@ import { io } from 'socket.io-client';
 import { supabase } from '@/lib/supabase';
 import toast from 'react-hot-toast';
 import { encryptMessage, decryptMessage } from '@/lib/crypto';
+import CallScreen from './CallScreen';
 
 interface ChatBoxProps {
   recipient: any;
@@ -21,6 +22,7 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
   const [selectedMessages, setSelectedMessages] = useState<Set<string>>(new Set());
   const [replyingTo, setReplyingTo] = useState<any>(null);
   const [swipeOffset, setSwipeOffset] = useState<Record<string, number>>({});
+  const [activeCallType, setActiveCallType] = useState<string | null>(recipient.incomingCallType ? `incoming-${recipient.incomingCallType}` : null);
   
   const socketRef = useRef<any>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -40,6 +42,14 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
     } catch(e) {}
     return { text: parsedText, replyTo: replyData };
   };
+
+  useEffect(() => {
+    if (recipient?.incomingCallType) {
+      setActiveCallType(`incoming-${recipient.incomingCallType}`);
+    } else {
+      setActiveCallType(null);
+    }
+  }, [recipient]);
 
   useEffect(() => {
     const fetchHistory = async () => {
@@ -337,10 +347,10 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
           </div>
 
           <div className="flex items-center gap-1" ref={menuRef}>
-            <button className="p-2.5 rounded-full hover:bg-white/10 text-gray-300 transition-colors">
+            <button onClick={() => setActiveCallType('video')} className="p-2.5 rounded-full hover:bg-white/10 text-gray-300 transition-colors">
               <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.934a.5.5 0 0 0-.777-.416L16 11"/><rect width="14" height="12" x="2" y="6" rx="2"/></svg>
             </button>
-            <button className="p-2.5 rounded-full hover:bg-white/10 text-gray-300 transition-colors">
+            <button onClick={() => setActiveCallType('audio')} className="p-2.5 rounded-full hover:bg-white/10 text-gray-300 transition-colors">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
             </button>
             <div className="relative">
@@ -594,6 +604,17 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
           </button>
           <img src={fullscreenImage} className="max-w-full max-h-full object-contain" />
         </div>
+      )}
+
+      {activeCallType && socketRef.current && (
+        <CallScreen 
+          recipient={recipient}
+          currentUser={currentUser}
+          roomId={roomId}
+          socket={socketRef.current}
+          initialCallType={activeCallType}
+          onEndCall={() => setActiveCallType(null)}
+        />
       )}
     </div>
   );
