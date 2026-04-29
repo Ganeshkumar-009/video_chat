@@ -53,6 +53,15 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
 
   useEffect(() => {
     const fetchHistory = async () => {
+      // 1. INSTANT CACHE LOAD
+      const cached = localStorage.getItem(`chat_${roomId}`);
+      if (cached) {
+        try {
+          setMessages(JSON.parse(cached));
+        } catch(e) {}
+      }
+
+      // 2. BACKGROUND FETCH
       const { data, error } = await supabase
         .from('messages')
         .select('*')
@@ -60,7 +69,7 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
         .order('created_at', { ascending: true });
         
       if (!error && data) {
-        setMessages(data.map(m => {
+        const formatted = data.map(m => {
           const parsed = parseMessageContent(m.content, roomId);
           return {
             id: m.id,
@@ -71,7 +80,10 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
             room: m.room_id,
             is_read: m.is_read
           };
-        }));
+        });
+        
+        setMessages(formatted);
+        localStorage.setItem(`chat_${roomId}`, JSON.stringify(formatted)); // Update cache
 
         await supabase
           .from('messages')
@@ -93,14 +105,18 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
         const newMsg = payload.new;
         if (newMsg.sender_username !== currentUser.username) {
           const parsed = parseMessageContent(newMsg.content, roomId);
-          setMessages(prev => [...prev, {
-            id: newMsg.id,
-            text: parsed.text,
-            replyTo: parsed.replyTo,
-            user: newMsg.sender_username,
-            timestamp: newMsg.created_at,
-            room: newMsg.room_id
-          }]);
+          setMessages(prev => {
+            const next = [...prev, {
+              id: newMsg.id,
+              text: parsed.text,
+              replyTo: parsed.replyTo,
+              user: newMsg.sender_username,
+              timestamp: newMsg.created_at,
+              room: newMsg.room_id
+            }];
+            localStorage.setItem(`chat_${roomId}`, JSON.stringify(next));
+            return next;
+          });
         }
       })
       .on('postgres_changes', {
@@ -153,7 +169,11 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
       timestamp: new Date().toISOString()
     };
 
-    setMessages(prev => [...prev, msgData]);
+    setMessages(prev => {
+      const next = [...prev, msgData];
+      localStorage.setItem(`chat_${roomId}`, JSON.stringify(next));
+      return next;
+    });
     setMessage(''); 
     setReplyingTo(null);
 
@@ -243,7 +263,11 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
         timestamp: new Date().toISOString()
       };
 
-      setMessages(prev => [...prev, msgData]);
+      setMessages(prev => {
+        const next = [...prev, msgData];
+        localStorage.setItem(`chat_${roomId}`, JSON.stringify(next));
+        return next;
+      });
       setMediaPreview(null);
       setIsUploading(false);
       setReplyingTo(null);

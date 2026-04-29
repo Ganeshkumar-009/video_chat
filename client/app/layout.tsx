@@ -20,7 +20,7 @@ export default function RootLayout({
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
       </head>
-      <body className={inter.className}>
+      <body className={inter.className} style={{ backgroundColor: '#0a0a0b', color: 'white' }}>
         {children}
         <Toaster />
       </body>

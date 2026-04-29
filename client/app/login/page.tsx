@@ -85,11 +85,8 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#0a0a0b] p-6">
-      {/* Simplified background for zero lag */}
-      <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_0%,rgba(120,119,198,0.1),transparent)] pointer-events-none" />
-      
       <div className="w-full max-w-md relative z-10 animate-in fade-in zoom-in duration-500">
-        <div className="bg-white/[0.03] backdrop-blur-md rounded-[32px] border border-white/[0.05] p-10 shadow-2xl">
+        <div className="bg-[#121214] rounded-[32px] border border-white/[0.05] p-10 shadow-2xl">
           <div className="text-center mb-10">
             <h1 className="text-3xl font-black text-white mb-2 tracking-tight">
               {isSignup ? "Create Account" : "Welcome Back"}
