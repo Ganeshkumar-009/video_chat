@@ -305,8 +305,8 @@ function UserItem({ user, isSelected, isLongPressed, onClick, onLongPress, unrea
           </span>
         </div>
         <div className="flex items-center justify-between">
-          <div className={`text-[13px] truncate ${isSelected ? 'text-purple-300/70' : 'text-gray-500 group-hover:text-gray-400'}`}>
-            Tap to chat...
+          <div className={`text-[13px] truncate ${unreadCount > 0 ? 'text-green-500 font-semibold' : isSelected ? 'text-purple-300/70' : 'text-gray-500 group-hover:text-gray-400'}`}>
+            {unreadCount > 0 ? `${unreadCount} new message${unreadCount > 1 ? 's' : ''}` : 'Tap to chat...'}
           </div>
           {unreadCount > 0 && (
             <div className="bg-green-500 text-black text-[11px] font-black min-w-[22px] h-[22px] px-1 rounded-full flex items-center justify-center shadow-lg shadow-green-500/40 animate-pulse">

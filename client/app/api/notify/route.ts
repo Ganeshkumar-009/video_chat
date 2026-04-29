@@ -39,7 +39,9 @@ export async function POST(req: Request) {
         priority: 'high' as const,
         notification: {
           channelId: 'high_importance_channel',
-          sound: 'default'
+          sound: 'default',
+          icon: '@mipmap/ic_launcher',
+          clickAction: 'FLUTTER_NOTIFICATION_CLICK'
         }
       }
     };

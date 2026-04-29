@@ -15,6 +15,9 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
   const [messages, setMessages] = useState<any[]>([]);
   const [message, setMessage] = useState('');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [mediaPreview, setMediaPreview] = useState<{ url: string; file: File; type: 'image' | 'video' } | null>(null);
+  const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const socketRef = useRef<any>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -107,6 +110,7 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
 
     // 1. Update UI immediately (Optimistic Update)
     setMessages(prev => [...prev, msgData]);
+    setMessage(''); // CLEAR IMMEDIATELY
 
     // 2. Save to Supabase (Persistence)
     const { error } = await supabase
@@ -149,7 +153,6 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
 
     // 4. Broadcast via Socket (Real-time)
     socketRef.current.emit('chat-message', msgData);
-    setMessage('');
   };
 
   const handleClearChat = async () => {
@@ -158,32 +161,72 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
     setIsMenuOpen(false);
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const type = file.type.startsWith('video') ? 'video' : 'image';
+    const url = URL.createObjectURL(file);
+    setMediaPreview({ url, file, type });
+  };
+
+  const sendMedia = async () => {
+    if (!mediaPreview) return;
+    setIsUploading(true);
+
     try {
-      const fileExt = file.name.split('.').pop();
+      const fileExt = mediaPreview.file.name.split('.').pop() || (mediaPreview.type === 'video' ? 'mp4' : 'jpg');
       const fileName = `${Math.random()}.${fileExt}`;
       const filePath = `${currentUser.id}/${fileName}`;
 
-      // Upload to Supabase Storage (Bucket must be named 'chat-media')
-      const { data, error } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from('chat-media')
-        .upload(filePath, file);
+        .upload(filePath, mediaPreview.file);
 
-      if (error) throw error;
+      if (uploadError) throw uploadError;
 
       const { data: { publicUrl } } = supabase.storage
         .from('chat-media')
         .getPublicUrl(filePath);
 
-      // Send the URL as a message
-      setMessage(publicUrl);
-      toast.success('File ready to send!');
+      const msgData = { 
+        room: roomId, 
+        text: publicUrl, 
+        user: currentUser.username,
+        timestamp: new Date().toISOString()
+      };
+
+      setMessages(prev => [...prev, msgData]);
+      setMediaPreview(null);
+      setIsUploading(false);
+
+      await supabase.from('messages').insert([{
+        room_id: roomId,
+        sender_id: currentUser.id,
+        sender_username: currentUser.username,
+        content: encryptMessage(publicUrl, roomId),
+        receiver_id: recipient.id,
+        is_read: false
+      }]);
+
+      socketRef.current.emit('chat-message', msgData);
+
+      // Trigger Notification
+      const { data: userData } = await supabase.from('users').select('fcm_token').eq('id', recipient.id).single();
+      if (userData?.fcm_token) {
+        await fetch('/api/notify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token: userData.fcm_token,
+            title: `WeChat: ${currentUser.username}`,
+            body: mediaPreview.type === 'video' ? '🎥 Sent a video' : '📷 Sent a photo'
+          })
+        });
+      }
     } catch (error: any) {
-      toast.error('Upload failed: Make sure "chat-media" bucket exists in Supabase');
-      console.error(error);
+      toast.error('Upload failed: Make sure "chat-media" bucket exists');
+      setIsUploading(false);
     }
   };
 
@@ -271,7 +314,12 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
                     : 'bg-white/[0.05] border border-white/[0.05] text-gray-100 rounded-tl-none'
                 }`}>
                   {isImage ? (
-                    <img src={msg.text} alt="Shared media" className="max-w-full rounded-lg my-1 shadow-2xl" />
+                    <img 
+                      src={msg.text} 
+                      alt="Shared media" 
+                      onClick={() => setFullscreenImage(msg.text)}
+                      className="max-w-full max-h-[300px] object-cover rounded-lg my-1 shadow-2xl cursor-pointer active:opacity-80 transition-opacity" 
+                    />
                   ) : isVideo ? (
                     <video src={msg.text} controls className="max-w-full rounded-lg my-1 shadow-2xl" />
                   ) : (
@@ -363,6 +411,52 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
           </button>
         </form>
       </div>
+
+      {/* Media Preview Overlay */}
+      {mediaPreview && (
+        <div className="absolute inset-0 bg-black/95 z-[200] flex flex-col">
+          <div className="flex items-center justify-between p-4 bg-black/50">
+            <button onClick={() => setMediaPreview(null)} className="p-2 text-white rounded-full hover:bg-white/10">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            </button>
+            <span className="text-white font-medium">Preview</span>
+            <div className="w-10"></div>
+          </div>
+          <div className="flex-1 flex items-center justify-center p-4 overflow-hidden">
+            {mediaPreview.type === 'image' ? (
+              <img src={mediaPreview.url} className="max-w-full max-h-full object-contain rounded-xl shadow-2xl" />
+            ) : (
+              <video src={mediaPreview.url} controls autoPlay loop className="max-w-full max-h-full rounded-xl shadow-2xl" />
+            )}
+          </div>
+          <div className="p-6 bg-black/50 flex justify-end">
+            <button 
+              onClick={sendMedia} 
+              disabled={isUploading}
+              className="px-8 py-3.5 bg-green-500 hover:bg-green-400 text-black font-bold rounded-full flex items-center gap-2 active:scale-95 transition-all shadow-lg shadow-green-500/20 disabled:opacity-50"
+            >
+              {isUploading ? 'Sending...' : 'Send Media'}
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polyline points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Fullscreen Image Viewer */}
+      {fullscreenImage && (
+        <div 
+          className="fixed inset-0 bg-black/95 z-[300] flex items-center justify-center p-2 animate-in fade-in zoom-in-95 duration-200"
+          onClick={() => setFullscreenImage(null)}
+        >
+          <button 
+            onClick={() => setFullscreenImage(null)} 
+            className="absolute top-6 left-6 p-2 text-white bg-black/50 rounded-full hover:bg-white/20 backdrop-blur-md"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+          </button>
+          <img src={fullscreenImage} className="max-w-full max-h-full object-contain" />
+        </div>
+      )}
     </div>
   );
 }
