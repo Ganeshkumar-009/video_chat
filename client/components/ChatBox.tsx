@@ -122,7 +122,7 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
   }, [roomId, currentUser.id]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView();
   }, [messages]);
 
   const sendMessage = async (e?: React.FormEvent) => {
