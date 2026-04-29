@@ -38,9 +38,8 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
         setAllUsers(usersList);
 
         // 3. Fetch messages where you are either sender or receiver
-        // Using a simpler query format to avoid any .or() issues
-        const { data: sentMsgs } = await supabase.from('messages').select('receiver_id, is_read, created_at').eq('sender_id', curr.id);
-        const { data: receivedMsgs } = await supabase.from('messages').select('sender_id, is_read, created_at').eq('receiver_id', curr.id);
+        const { data: sentMsgs } = await supabase.from('messages').select('receiver_id, is_read, created_at, content').eq('sender_id', curr.id);
+        const { data: receivedMsgs } = await supabase.from('messages').select('sender_id, is_read, created_at, content').eq('receiver_id', curr.id);
 
         const allMsgs = [...(sentMsgs || []), ...(receivedMsgs || [])];
         
@@ -67,9 +66,37 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
           }
         });
 
-        // Map IDs back to user objects
+        // Decrypt helper for previews
+        const decryptPreview = (text: string) => {
+          if (!text) return '';
+          try {
+            const dec = text.split('').map(c => String.fromCharCode(c.charCodeAt(0) - 5)).join('');
+            if (dec.includes('supabase.co/storage/v1/object/public/chat-media')) {
+              return dec.match(/\.(mp4|webm|mov)/i) ? '🎥 Video' : '📷 Photo';
+            }
+            return dec;
+          } catch (e) {
+            return 'Message';
+          }
+        };
+
+        // Map IDs back to user objects with last message info
         const recents = Array.from(participantIds)
-          .map(id => usersList.find(u => String(u.id) === id))
+          .map(id => {
+            const u = usersList.find(u => String(u.id) === id);
+            if (!u) return null;
+            
+            const lastMsg = allMsgs.find((m: any) => 
+              (String(m.sender_id) === id && String(m.receiver_id) === String(curr.id)) ||
+              (String(m.sender_id) === String(curr.id) && String(m.receiver_id) === id)
+            );
+
+            return {
+              ...u,
+              lastMessageText: lastMsg ? decryptPreview(lastMsg.content) : null,
+              lastMessageTime: lastMsg ? lastMsg.created_at : null
+            };
+          })
           .filter(Boolean);
 
         setRecentUsers(recents as any[]);
@@ -90,6 +117,18 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
         const newMsg = payload.new as any;
+        
+        // Decrypt for real-time update
+        const decText = newMsg.content ? newMsg.content.split('').map((c:string) => String.fromCharCode(c.charCodeAt(0) - 5)).join('') : '';
+        const preview = decText.includes('chat-media') ? (decText.match(/\.(mp4|webm|mov)/i) ? '🎥 Video' : '📷 Photo') : decText;
+
+        setRecentUsers(prev => prev.map(u => {
+          if (String(u.id) === String(newMsg.sender_id) || String(u.id) === String(newMsg.receiver_id)) {
+            return { ...u, lastMessageText: preview, lastMessageTime: newMsg.created_at };
+          }
+          return u;
+        }));
+
         // If YOU are the receiver, increment unread count
         if (String(newMsg.receiver_id) === String(curr?.id)) {
           toast(`New message from ${newMsg.sender_username}`, { icon: '💬' });
@@ -254,9 +293,6 @@ function getTimeAgo(dateStr: string) {
 }
 
 function UserItem({ user, isSelected, isLongPressed, onClick, onLongPress, unreadCount }: { user: any, isSelected: boolean, isLongPressed: boolean, onClick: () => void, onLongPress: () => void, unreadCount: number }) {
-  // Trust the database status directly, since mobile visibilitychange keeps it perfectly accurate
-  // This bypasses any clock desync issues between different phones
-  const isOnline = user.status === 'online';
 
   let pressTimer: any;
   const handleTouchStart = () => {
@@ -301,12 +337,12 @@ function UserItem({ user, isSelected, isLongPressed, onClick, onLongPress, unrea
             {user.username}
           </div>
           <span className={`text-[11px] font-medium ${unreadCount > 0 ? 'text-green-500' : 'text-gray-500'}`}>
-            {unreadCount > 0 ? 'New message' : 'Just now'}
+            {unreadCount > 0 ? 'New message' : (user.lastMessageTime ? getTimeAgo(user.lastMessageTime) : 'Just now')}
           </span>
         </div>
         <div className="flex items-center justify-between">
           <div className={`text-[13px] truncate ${unreadCount > 0 ? 'text-green-500 font-semibold' : isSelected ? 'text-purple-300/70' : 'text-gray-500 group-hover:text-gray-400'}`}>
-            {unreadCount > 0 ? `${unreadCount} new message${unreadCount > 1 ? 's' : ''}` : 'Tap to chat...'}
+            {unreadCount > 0 ? `${unreadCount} new message${unreadCount > 1 ? 's' : ''}` : (user.lastMessageText || 'Tap to chat...')}
           </div>
           {unreadCount > 0 && (
             <div className="bg-green-500 text-black text-[11px] font-black min-w-[22px] h-[22px] px-1 rounded-full flex items-center justify-center shadow-lg shadow-green-500/40 animate-pulse">
