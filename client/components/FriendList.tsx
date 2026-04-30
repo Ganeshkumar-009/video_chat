@@ -77,10 +77,10 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
               if (json.text !== undefined) dec = json.text;
             } catch(e) {}
             
-            if (dec.includes('chat-media') || dec.match(/\.(jpeg|jpg|gif|png|webp|mp4|webm|mov)/i)) {
+            if (dec && (dec.includes('chat-media') || dec.match(/\.(jpeg|jpg|gif|png|webp|mp4|webm|mov)/i))) {
               return dec.match(/\.(mp4|webm|mov)/i) ? '🎥 Video' : '📷 Photo';
             }
-            return dec;
+            return dec || '';
           } catch (e) {
             return 'Message';
           }
@@ -142,9 +142,9 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
                 if (json.text !== undefined) decText = json.text;
               } catch(e) {}
               
-              const preview = (decText.includes('chat-media') || decText.match(/\.(jpeg|jpg|gif|png|webp|mp4|webm|mov)/i)) 
+              const preview = (decText && (decText.includes('chat-media') || decText.match(/\.(jpeg|jpg|gif|png|webp|mp4|webm|mov)/i))) 
                 ? (decText.match(/\.(mp4|webm|mov)/i) ? '🎥 Video' : '📷 Photo') 
-                : decText;
+                : (decText || 'Message');
               return { ...u, lastMessageText: preview, lastMessageTime: newMsg.created_at };
             }
             return u;
@@ -175,9 +175,9 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
               if (json.text !== undefined) decText = json.text;
             } catch(e) {}
             
-            const preview = (decText.includes('chat-media') || decText.match(/\.(jpeg|jpg|gif|png|webp|mp4|webm|mov)/i)) 
+            const preview = (decText && (decText.includes('chat-media') || decText.match(/\.(jpeg|jpg|gif|png|webp|mp4|webm|mov)/i))) 
               ? (decText.match(/\.(mp4|webm|mov)/i) ? '🎥 Video' : '📷 Photo') 
-              : decText;
+              : (decText || 'Message');
             return { ...u, lastMessageText: preview };
           }
           return u;
