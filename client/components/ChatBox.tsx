@@ -107,6 +107,12 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
         const newMsg = payload.new;
         if (newMsg.sender_username !== currentUser.username) {
           const parsed = parseMessageContent(newMsg.content, roomId);
+          
+          // Auto-Popup for incoming calls (WhatsApp style)
+          if (parsed.callData && parsed.callData.status === 'ringing') {
+             setActiveCallType(`incoming-${parsed.callData.type}`);
+          }
+
           setMessages(prev => {
             const next = [...prev, {
               id: newMsg.id,
