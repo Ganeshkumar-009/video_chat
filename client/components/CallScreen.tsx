@@ -70,40 +70,40 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
         const handleBroadcast = async ({ payload }: any) => {
           if (payload.room !== roomId) return;
 
-          // Handshake Ping-Pong to ensure connection
-          if (payload.type === 'handshake-ping' && !isInitiator && callStatus === 'calling') {
-            if (payload.messageId) activeMessageId.current = payload.messageId;
-            channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'handshake-pong', room: roomId } });
-            return;
-          }
-
-          if (payload.type === 'handshake-pong' && isInitiator && callStatus === 'calling') {
+          // Aggressive Accepted signal for receiver
+          if (payload.type === 'call-signal' && payload.signal === 'call-accepted' && isInitiator) {
+             if (callStatus === 'connected') return;
              try {
-                callStartTime.current = Date.now();
-                const offer = await pc.createOffer();
-                await pc.setLocalDescription(offer);
-                channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'offer', room: roomId, offer } });
-             } catch(e) { console.error('Pong offer error:', e); }
-             return;
+                if (!pc.localDescription) {
+                   callStartTime.current = Date.now();
+                   const offer = await pc.createOffer();
+                   await pc.setLocalDescription(offer);
+                   channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'offer', room: roomId, offer } });
+                }
+             } catch(e) { console.error('Offer error:', e); }
           }
 
           if (payload.type === 'offer' && !isInitiator) {
              try {
-                await pc.setRemoteDescription(new RTCSessionDescription(payload.offer));
-                const answer = await pc.createAnswer();
-                await pc.setLocalDescription(answer);
-                channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'answer', room: roomId, answer } });
-                
-                while (pendingCandidates.current.length > 0) {
-                  const candidate = pendingCandidates.current.shift();
-                  if (candidate) await pc.addIceCandidate(candidate);
+                if (pc.signalingState === 'stable' || pc.signalingState === 'have-local-offer') {
+                   await pc.setRemoteDescription(new RTCSessionDescription(payload.offer));
+                   const answer = await pc.createAnswer();
+                   await pc.setLocalDescription(answer);
+                   channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'answer', room: roomId, answer } });
+                   
+                   while (pendingCandidates.current.length > 0) {
+                     const candidate = pendingCandidates.current.shift();
+                     if (candidate) await pc.addIceCandidate(candidate);
+                   }
                 }
              } catch(e) { console.error('Offer error:', e); }
           }
           
-          if (payload.type === 'answer') {
+          if (payload.type === 'answer' && isInitiator) {
              try {
-                await pc.setRemoteDescription(new RTCSessionDescription(payload.answer));
+                if (pc.signalingState === 'have-local-offer') {
+                   await pc.setRemoteDescription(new RTCSessionDescription(payload.answer));
+                }
              } catch(e) { console.error('Answer error:', e); }
           }
 
@@ -119,14 +119,6 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
           }
 
           if (payload.type === 'call-signal') {
-             if (payload.signal === 'call-accepted' && isInitiator) {
-                try {
-                   callStartTime.current = Date.now();
-                   const offer = await pc.createOffer();
-                   await pc.setLocalDescription(offer);
-                   channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'offer', room: roomId, offer } });
-                } catch(e) { console.error('Create offer error:', e); }
-             }
              if (payload.signal === 'call-accepted' && !isInitiator) {
                 callStartTime.current = Date.now();
              }
@@ -159,13 +151,13 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
 
           if (data && data.length > 0) {
              activeMessageId.current = data[0].id;
-             // Retry loop to find the other peer
-             const retryInterval = setInterval(() => {
-                if (callStatus === 'connected' || !peerConnection.current) {
-                   clearInterval(retryInterval);
+             // Aggressively send messageId to receiver
+             const idInterval = setInterval(() => {
+                if (!peerConnection.current || activeMessageId.current === null) {
+                   clearInterval(idInterval);
                    return;
                 }
-                channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'handshake-ping', room: roomId, messageId: data[0].id } });
+                channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'call-signal', room: roomId, messageId: data[0].id } });
              }, 2000);
           }
           
@@ -182,7 +174,14 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
             });
           }
         } else {
-          channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'call-signal', room: roomId, signal: 'call-accepted' } });
+          // Aggressively send Accepted signal until connection starts
+          const acceptInterval = setInterval(() => {
+             if (callStatus === 'connected' || !peerConnection.current) {
+                clearInterval(acceptInterval);
+                return;
+             }
+             channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'call-signal', room: roomId, signal: 'call-accepted' } });
+          }, 1500);
         }
 
       } catch (err) {
