@@ -203,9 +203,9 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
       {callStatus !== 'connected' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-[#1a1a1c] to-[#0a0a0b] z-10">
           <div className="w-28 h-28 bg-gradient-to-tr from-purple-600 to-indigo-600 rounded-full flex items-center justify-center font-bold text-white text-5xl shadow-2xl mb-6 ring-8 ring-purple-500/20">
-             {recipient.username[0].toUpperCase()}
+             {recipient?.username?.[0]?.toUpperCase() || '?'}
           </div>
-          <h2 className="text-3xl font-bold text-white tracking-wide">{recipient.username}</h2>
+          <h2 className="text-3xl font-bold text-white tracking-wide">{recipient?.username || 'User'}</h2>
           <p className="text-purple-400 mt-2 font-medium animate-pulse">
             {callStatus === 'calling' ? 'Calling...' : 'Ringing...'}
           </p>
