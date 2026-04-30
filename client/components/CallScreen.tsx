@@ -12,318 +12,151 @@ interface CallScreenProps {
   onEndCall: () => void;
 }
 
+declare global {
+  interface Window {
+    JitsiMeetExternalAPI: any;
+  }
+}
+
 export default function CallScreen({ recipient, currentUser, roomId, channel, initialCallType, onEndCall }: CallScreenProps) {
-  const [callStatus, setCallStatus] = useState('calling');  
-  const [isMuted, setIsMuted] = useState(false);
-  const [isVideoOff, setIsVideoOff] = useState(initialCallType === 'audio' || initialCallType === 'incoming-audio');
-  const [log, setLog] = useState('Initializing...');
-  const localVideoRef = useRef<HTMLVideoElement>(null);
-  const remoteVideoRef = useRef<HTMLVideoElement>(null);
-  const peerConnection = useRef<RTCPeerConnection | null>(null);
-  const localStream = useRef<MediaStream | null>(null);
-  const callStartTime = useRef<number | null>(null);
+  const jitsiContainerRef = useRef<HTMLDivElement>(null);
+  const apiRef = useRef<any>(null);
   const activeMessageId = useRef<string | null>(null);
-  const pendingCandidates = useRef<RTCIceCandidate[]>([]);
+  const callStartTime = useRef<number>(Date.now());
+  const [isJitsiLoaded, setIsJitsiLoaded] = useState(false);
 
   useEffect(() => {
+    // 1. Load Jitsi Script
+    const script = document.createElement('script');
+    script.src = 'https://8x8.vc/vpaas-magic-cookie-86109968da98471589d9852261f22df8/external_api.js';
+    script.async = true;
+    script.onload = () => setIsJitsiLoaded(true);
+    document.body.appendChild(script);
+
+    // 2. Initial Setup (Database Message)
     let isInitiator = !initialCallType.startsWith('incoming');
     const type = initialCallType.replace('incoming-', '');
 
-    const setupMedia = async () => {
-      try {
-        setLog('Accessing camera/mic...');
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: type === 'video',
-          audio: true
+    const initCall = async () => {
+      if (isInitiator) {
+        const payloadStr = JSON.stringify({
+          text: `📞 Starting ${type} call...`,
+          callData: { type, status: 'ringing', isVideo: type === 'video' }
         });
-        localStream.current = stream;
-        if (localVideoRef.current) localVideoRef.current.srcObject = stream;
-        setLog('Media ready. Creating connection...');
+        
+        const { data } = await supabase.from('messages').insert([{
+          room_id: roomId,
+          sender_id: currentUser.id,
+          sender_username: currentUser.username,
+          content: encryptMessage(payloadStr, roomId),
+          receiver_id: recipient.id,
+          is_read: false
+        }]).select();
 
-        const pc = new RTCPeerConnection({
-           iceServers: [
-             { urls: 'stun:stun.l.google.com:19302' },
-             { urls: 'stun:stun1.l.google.com:19302' },
-             {
-               urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443?transport=tcp'],
-               username: 'openrelayproject',
-               credential: 'openrelayproject'
-             }
-           ]
-        });
-        peerConnection.current = pc;
-
-        stream.getTracks().forEach(t => pc.addTrack(t, stream));
-
-        pc.ontrack = (event) => {
-          setLog('Remote track received!');
-          if (remoteVideoRef.current) {
-            remoteVideoRef.current.srcObject = event.streams[0];
-          }
-          setCallStatus('connected');
-        };
-
-        pc.onicecandidate = (event) => {
-          if (event.candidate) {
-            channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'ice-candidate', room: roomId, candidate: event.candidate } });
-          }
-        };
-
-        const handleBroadcast = async ({ payload }: any) => {
-          if (payload.room !== roomId) return;
-
-          // Aggressive Accepted signal for receiver
-          if (payload.type === 'call-signal' && payload.signal === 'call-accepted' && isInitiator) {
-             if (callStatus === 'connected') return;
-             try {
-                if (!pc.localDescription) {
-                   setLog('Peer accepted! Sending offer...');
-                   callStartTime.current = Date.now();
-                   const offer = await pc.createOffer();
-                   await pc.setLocalDescription(offer);
-                   channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'offer', room: roomId, offer } });
-                }
-             } catch(e) { setLog('Offer error: ' + (e as any).message); }
-          }
-
-          if (payload.type === 'offer' && !isInitiator) {
-             setLog('Offer received! Sending answer...');
-             try {
-                if (pc.signalingState === 'stable' || pc.signalingState === 'have-local-offer') {
-                   await pc.setRemoteDescription(new RTCSessionDescription(payload.offer));
-                   const answer = await pc.createAnswer();
-                   await pc.setLocalDescription(answer);
-                   channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'answer', room: roomId, answer } });
-                   
-                   while (pendingCandidates.current.length > 0) {
-                     const candidate = pendingCandidates.current.shift();
-                     if (candidate) await pc.addIceCandidate(candidate);
-                   }
-                }
-             } catch(e) { setLog('Offer processing error: ' + (e as any).message); }
-          }
-          
-          if (payload.type === 'answer' && isInitiator) {
-             setLog('Answer received! Finishing handshake...');
-             try {
-                if (pc.signalingState === 'have-local-offer') {
-                   await pc.setRemoteDescription(new RTCSessionDescription(payload.answer));
-                }
-             } catch(e) { setLog('Answer processing error: ' + (e as any).message); }
-          }
-
-          if (payload.type === 'ice-candidate') {
-             try {
-                const candidate = new RTCIceCandidate(payload.candidate);
-                if (pc.remoteDescription && pc.remoteDescription.type) {
-                  await pc.addIceCandidate(candidate);
-                } else {
-                  pendingCandidates.current.push(candidate);
-                }
-             } catch(e) {}
-          }
-
-          if (payload.type === 'call-signal') {
-             if (payload.signal === 'call-accepted' && !isInitiator) {
-                callStartTime.current = Date.now();
-             }
-             if (payload.signal === 'call-ended') {
-                endCallLocally();
-             }
-             if (payload.messageId && !isInitiator) {
-                activeMessageId.current = payload.messageId;
-             }
-          }
-        };
-
-        channel.on('broadcast', { event: 'webrtc' }, handleBroadcast);
-        (channel as any)._webrtcHandler = handleBroadcast;
-
-        if (isInitiator) {
-          setLog('Starting call in database...');
-          const payloadStr = JSON.stringify({
-             text: `📞 ${type === 'video' ? 'Video' : 'Audio'} Call`,
-             callData: { type, status: 'ringing', isVideo: type === 'video' }
-          });
-          
-          const { data } = await supabase.from('messages').insert([{
-             room_id: roomId,
-             sender_id: currentUser.id,
-             sender_username: currentUser.username,
-             content: encryptMessage(payloadStr, roomId),
-             receiver_id: recipient.id,
-             is_read: false
-          }]).select();
-
-          if (data && data.length > 0) {
-             activeMessageId.current = data[0].id;
-             // Aggressively send messageId to receiver
-             const idInterval = setInterval(() => {
-                if (!peerConnection.current || callStatus === 'connected' || activeMessageId.current === null) {
-                   clearInterval(idInterval);
-                   return;
-                }
-                channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'call-signal', room: roomId, messageId: data[0].id } });
-             }, 3000);
-          }
-          
-          const { data: userData } = await supabase.from('users').select('fcm_token').eq('id', recipient.id).single();
-          if (userData?.fcm_token) {
-            await fetch('/api/notify', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                token: userData.fcm_token,
-                title: `Incoming ${type} call`,
-                body: `${currentUser.username} is calling you...`
-              })
-            });
-          }
-        } else {
-          setLog('Waiting for initiator...');
-          // Aggressively send Accepted signal until connection starts
-          const acceptInterval = setInterval(() => {
-             if (callStatus === 'connected' || !peerConnection.current) {
-                clearInterval(acceptInterval);
-                return;
-             }
-             channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'call-signal', room: roomId, signal: 'call-accepted' } });
-          }, 2000);
+        if (data && data.length > 0) {
+          activeMessageId.current = data[0].id;
+          // Notify peer about the message ID
+          channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'call-signal', room: roomId, messageId: data[0].id } });
         }
-
-      } catch (err) {
-        setLog("Setup Error: " + (err as any).message);
-        setTimeout(endCallLocally, 3000);
       }
+
+      // Handle termination signals from peer
+      const handleBroadcast = ({ payload }: any) => {
+        if (payload.room !== roomId) return;
+        if (payload.type === 'call-signal') {
+          if (payload.signal === 'call-ended') {
+            onEndCall();
+          }
+          if (payload.messageId && !isInitiator) {
+            activeMessageId.current = payload.messageId;
+          }
+        }
+      };
+      channel.on('broadcast', { event: 'webrtc' }, handleBroadcast);
+      (channel as any)._jitsiHandler = handleBroadcast;
     };
 
-    setupMedia();
+    initCall();
 
-    return () => { endCallLocally(); };
+    return () => {
+      if (apiRef.current) apiRef.current.dispose();
+      document.body.removeChild(script);
+    };
   }, []);
 
-  const endCallLocally = async () => {
-    localStream.current?.getTracks().forEach(t => t.stop());
-    peerConnection.current?.close();
-    if ((channel as any)._webrtcHandler) (channel as any)._webrtcHandler = () => {}; 
+  useEffect(() => {
+    if (isJitsiLoaded && jitsiContainerRef.current && !apiRef.current) {
+      const type = initialCallType.replace('incoming-', '');
+      
+      // Jitsi Room Name must be unique
+      const domain = '8x8.vc';
+      const options = {
+        roomName: `vpaas-magic-cookie-86109968da98471589d9852261f22df8/${roomId}`,
+        width: '100%',
+        height: '100%',
+        parentNode: jitsiContainerRef.current,
+        userInfo: {
+          displayName: currentUser.username
+        },
+        configOverwrite: {
+          startWithAudioMuted: false,
+          startWithVideoMuted: type === 'audio',
+          prejoinPageEnabled: false,
+          disableInviteFunctions: true,
+        },
+        interfaceConfigOverwrite: {
+          TOOLBAR_BUTTONS: [
+            'microphone', 'camera', 'closedcaptions', 'desktop', 'fullscreen',
+            'fodeviceselection', 'hangup', 'profile', 'chat', 'recording',
+            'livestreaming', 'etherpad', 'sharedvideo', 'settings', 'raisehand',
+            'videoquality', 'filmstrip', 'invite', 'feedback', 'stats', 'shortcuts',
+            'tileview', 'videobackgroundblur', 'download', 'help', 'mute-everyone',
+            'security'
+          ],
+        }
+      };
 
+      apiRef.current = new window.JitsiMeetExternalAPI(domain, options);
+
+      apiRef.current.addEventListeners({
+        readyToClose: () => handleHangup(),
+        videoConferenceTerminated: () => handleHangup()
+      });
+    }
+  }, [isJitsiLoaded]);
+
+  const handleHangup = async () => {
+    // Send hangup signal to peer
+    channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'call-signal', room: roomId, signal: 'call-ended' } });
+    
+    // Update DB
     if (activeMessageId.current) {
-       let durationStr = "0s";
-       if (callStartTime.current) {
-          const secs = Math.floor((Date.now() - callStartTime.current) / 1000);
-          if (secs > 60) durationStr = `${Math.floor(secs/60)}m ${secs%60}s`;
-          else durationStr = `${secs}s`;
-       }
-       
-       const endPayloadStr = JSON.stringify({
-          text: `Call ended (${durationStr})`,
-          callData: { type: initialCallType.replace('incoming-', ''), status: 'ended', duration: durationStr }
-       });
+      const durationSecs = Math.floor((Date.now() - callStartTime.current) / 1000);
+      const durationStr = durationSecs > 60 ? `${Math.floor(durationSecs/60)}m ${durationSecs%60}s` : `${durationSecs}s`;
+      
+      const endPayloadStr = JSON.stringify({
+        text: `Call ended (${durationStr})`,
+        callData: { type: initialCallType.replace('incoming-', ''), status: 'ended', duration: durationStr }
+      });
 
-       await supabase.from('messages').update({
-          content: encryptMessage(endPayloadStr, roomId)
-       }).eq('id', activeMessageId.current);
-       activeMessageId.current = null;
+      await supabase.from('messages').update({
+        content: encryptMessage(endPayloadStr, roomId)
+      }).eq('id', activeMessageId.current);
     }
 
     onEndCall();
   };
 
-  const handleHangup = () => {
-    channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'call-signal', room: roomId, signal: 'call-ended' } });
-    endCallLocally();
-  };
-
-  const toggleMute = () => {
-    if (localStream.current) {
-      localStream.current.getAudioTracks().forEach(t => t.enabled = !t.enabled);
-      setIsMuted(!isMuted);
-    }
-  };
-
-  const toggleVideo = () => {
-    if (localStream.current) {
-      localStream.current.getVideoTracks().forEach(t => t.enabled = !t.enabled);
-      setIsVideoOff(!isVideoOff);
-    }
-  };
-
-  const handleStartAudio = () => {
-    if (remoteVideoRef.current) {
-      remoteVideoRef.current.muted = false;
-      remoteVideoRef.current.play().catch(() => {});
-    }
-  };
-
   return (
-    <div className="absolute inset-0 bg-[#0a0a0b] z-[1000] flex flex-col items-center justify-center overflow-hidden animate-in fade-in zoom-in-95 duration-300">
-      <video 
-        ref={remoteVideoRef} 
-        autoPlay 
-        playsInline 
-        muted
-        className={`w-full h-full object-cover absolute inset-0 ${callStatus !== 'connected' ? 'opacity-0' : 'opacity-100'}`} 
-      />
-
-      {callStatus === 'connected' && remoteVideoRef.current?.muted !== false && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-           <button 
-             onClick={handleStartAudio}
-             className="px-8 py-4 bg-purple-600 text-white rounded-full font-bold shadow-2xl animate-bounce hover:bg-purple-700 transition-all"
-           >
-              Tap to Start Video & Audio
-           </button>
+    <div className="absolute inset-0 bg-black z-[2000] flex flex-col">
+      <div ref={jitsiContainerRef} className="flex-1 w-full h-full" />
+      
+      {!isJitsiLoaded && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0a0a0b]">
+          <div className="w-20 h-20 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mb-4" />
+          <p className="text-white font-medium">Launching Secure Video...</p>
         </div>
       )}
-
-      {callStatus !== 'connected' && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-[#1a1a1c] to-[#0a0a0b] z-10">
-          <div className="w-28 h-28 bg-gradient-to-tr from-purple-600 to-indigo-600 rounded-full flex items-center justify-center font-bold text-white text-5xl shadow-2xl mb-6 ring-8 ring-purple-500/20">
-             {recipient.username[0].toUpperCase()}
-          </div>
-          <h2 className="text-3xl font-bold text-white tracking-wide">{recipient.username}</h2>
-          <p className="text-purple-400 mt-2 font-medium animate-pulse">
-            {callStatus === 'calling' ? 'Calling...' : 'Connecting...'}
-          </p>
-          <div className="mt-8 text-white/40 text-xs font-mono">{log}</div>
-        </div>
-      )}
-
-      <div className={`absolute bottom-32 right-6 w-32 h-44 bg-black rounded-2xl overflow-hidden shadow-2xl border-2 border-white/10 z-20 transition-all ${isVideoOff ? 'hidden' : 'block'}`}>
-        <video 
-          ref={localVideoRef} 
-          autoPlay 
-          playsInline 
-          muted 
-          className="w-full h-full object-cover transform scale-x-[-1]" 
-        />
-      </div>
-
-      <div className="absolute bottom-0 inset-x-0 h-28 bg-gradient-to-t from-black/80 to-transparent flex items-center justify-center gap-6 z-30 pb-4">
-         <button onClick={toggleVideo} className={`w-14 h-14 rounded-full flex items-center justify-center backdrop-blur-md transition-colors ${isVideoOff ? 'bg-white text-black' : 'bg-white/20 text-white hover:bg-white/30'}`}>
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.934a.5.5 0 0 0-.777-.416L16 11"/><rect width="14" height="12" x="2" y="6" rx="2"/></svg>
-            {isVideoOff && <div className="absolute w-8 h-0.5 bg-black rotate-45" />}
-         </button>
-         <button onClick={toggleMute} className={`w-14 h-14 rounded-full flex items-center justify-center backdrop-blur-md transition-colors ${isMuted ? 'bg-white text-black' : 'bg-white/20 text-white hover:bg-white/30'}`}>
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
-            {isMuted && <div className="absolute w-8 h-0.5 bg-black rotate-45" />}
-         </button>
-         <button onClick={handleHangup} className="w-16 h-16 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center text-white shadow-lg shadow-red-500/30 transform hover:scale-105 transition-all">
-            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/><line x1="22" y1="2" x2="2" y2="22"/></svg>
-         </button>
-      </div>
-
-      <div className="absolute top-0 inset-x-0 h-24 bg-gradient-to-b from-black/80 to-transparent flex items-start p-6 z-30">
-        <button onClick={handleHangup} className="p-2 text-white hover:bg-white/10 rounded-full transition-colors backdrop-blur-md">
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m15 18-6-6 6-6"/></svg>
-        </button>
-        <div className="flex-1 text-center pr-10">
-           <div className="text-white/80 text-[13px] font-medium flex items-center justify-center gap-1.5 mt-1">
-              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect width="16" height="20" x="4" y="2" rx="2" ry="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01"/><path d="M16 6h.01"/><path d="M12 6h.01"/><path d="M12 10h.01"/><path d="M12 14h.01"/><path d="M16 10h.01"/><path d="M16 14h.01"/><path d="M8 10h.01"/><path d="M8 14h.01"/></svg>
-              End-to-end encrypted
-           </div>
-        </div>
-      </div>
     </div>
   );
 }
