@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { encryptMessage, decryptMessage } from '@/lib/crypto';
+import { encryptMessage } from '@/lib/crypto';
 
 interface CallScreenProps {
   recipient: any;
@@ -58,6 +58,7 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
             remoteVideoRef.current.play().catch(() => {});
           }
           setCallStatus('connected');
+          if (!callStartTime.current) callStartTime.current = Date.now();
         };
 
         pc.onicecandidate = (event) => {
@@ -66,21 +67,9 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
           }
         };
 
-        // Aggressive Broadcast + Realtime listener
         const handleBroadcast = async ({ payload }: any) => {
           if (payload.room !== roomId) return;
 
-          if (payload.type === 'offer' && !isInitiator) {
-             try {
-                if (pc.signalingState === 'stable') {
-                   await pc.setRemoteDescription(new RTCSessionDescription(payload.offer));
-                   const answer = await pc.createAnswer();
-                   await pc.setLocalDescription(answer);
-                   channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'answer', room: roomId, answer } });
-                }
-             } catch(e) {}
-          }
-          
           if (payload.type === 'answer' && isInitiator) {
              try {
                 if (pc.signalingState === 'have-local-offer') {
@@ -98,19 +87,8 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
           }
 
           if (payload.type === 'call-signal') {
-             if (payload.signal === 'call-accepted' && isInitiator) {
-                if (pc.signalingState === 'stable') {
-                   callStartTime.current = Date.now();
-                   const offer = await pc.createOffer();
-                   await pc.setLocalDescription(offer);
-                   channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'offer', room: roomId, offer } });
-                }
-             }
              if (payload.signal === 'call-ended') {
                 endCallLocally();
-             }
-             if (payload.messageId && !isInitiator) {
-                activeMessageId.current = payload.messageId;
              }
           }
         };
@@ -118,20 +96,19 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
         channel.on('broadcast', { event: 'webrtc' }, handleBroadcast);
         (channel as any)._webrtcHandler = handleBroadcast;
 
-        // DB-Sync Listener for reliability
-        const dbChannel = supabase.channel(`db-sync-${roomId}`)
-          .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `room_id=eq.${roomId}` }, (payload) => {
-             const msg = payload.new;
-             const parsed = JSON.parse(decryptMessage(msg.content, roomId));
-             if (parsed.callData?.status === 'ended') {
-                endCallLocally();
-             }
-          }).subscribe();
-
         if (isInitiator) {
+          // Create Offer Immediately
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+
           const payloadStr = JSON.stringify({
              text: `📞 ${type === 'video' ? 'Video' : 'Audio'} Call`,
-             callData: { type, status: 'ringing', isVideo: type === 'video' }
+             callData: { 
+               type, 
+               status: 'ringing', 
+               isVideo: type === 'video',
+               offer: offer // EMBED THE OFFER IN THE DB MESSAGE
+             }
           });
           
           const { data } = await supabase.from('messages').insert([{
@@ -145,24 +122,15 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
 
           if (data && data.length > 0) {
              activeMessageId.current = data[0].id;
-             // Heartbeat to find the peer
-             const heartInterval = setInterval(() => {
-                if (callStatus === 'connected' || !peerConnection.current) {
-                   clearInterval(heartInterval);
-                   return;
-                }
-                channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'call-signal', room: roomId, messageId: data[0].id, signal: 'ping' } });
-             }, 1000);
           }
-        } else {
-          callStartTime.current = Date.now();
-          const acceptInterval = setInterval(() => {
-             if (callStatus === 'connected' || !peerConnection.current) {
-                clearInterval(acceptInterval);
-                return;
-             }
-             channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'call-signal', room: roomId, signal: 'call-accepted' } });
-          }, 1000);
+        } else if (recipient.offer) {
+          // RECEIVER: Use the offer from the DB message instantly!
+          try {
+             await pc.setRemoteDescription(new RTCSessionDescription(recipient.offer));
+             const answer = await pc.createAnswer();
+             await pc.setLocalDescription(answer);
+             channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'answer', room: roomId, answer } });
+          } catch(e) {}
         }
 
       } catch (err) {
@@ -182,15 +150,15 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
     if ((channel as any)._webrtcHandler) (channel as any)._webrtcHandler = () => {}; 
 
     if (activeMessageId.current) {
-       let durationStr = "0s";
+       let durationStr = "Missed Call";
        if (callStartTime.current) {
           const secs = Math.floor((Date.now() - callStartTime.current) / 1000);
-          if (secs > 60) durationStr = `${Math.floor(secs/60)}m ${secs%60}s`;
-          else durationStr = `${secs}s`;
+          if (secs > 60) durationStr = `Call ended (${Math.floor(secs/60)}m ${secs%60}s)`;
+          else durationStr = `Call ended (${secs}s)`;
        }
        
        const endPayloadStr = JSON.stringify({
-          text: `Call ended (${durationStr})`,
+          text: durationStr,
           callData: { type: initialCallType.replace('incoming-', ''), status: 'ended', duration: durationStr }
        });
 
@@ -263,7 +231,7 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
             {isMuted && <div className="absolute w-8 h-0.5 bg-black rotate-45" />}
          </button>
-         <button onClick={handleHangup} className="w-16 h-16 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center text-white shadow-lg shadow-red-500/30 transform hover:scale-105 transition-all">
+         <button handleHangup onClick={handleHangup} className="w-16 h-16 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center text-white shadow-lg shadow-red-500/30 transform hover:scale-105 transition-all">
             <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/><line x1="22" y1="2" x2="2" y2="22"/></svg>
          </button>
       </div>

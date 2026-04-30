@@ -110,6 +110,8 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
           
           // Auto-Popup for incoming calls (WhatsApp style)
           if (parsed.callData && parsed.callData.status === 'ringing') {
+             // Pass the offer to the recipient object so CallScreen can use it
+             recipient.offer = parsed.callData.offer;
              setActiveCallType(`incoming-${parsed.callData.type}`);
           }
 

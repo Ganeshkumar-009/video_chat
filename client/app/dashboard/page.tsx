@@ -61,9 +61,10 @@ export default function Dashboard() {
                   callerId: newMsg.sender_id, 
                   username: newMsg.sender_username, 
                   type: json.callData.type, 
-                  room: newMsg.room_id 
+                  room: newMsg.room_id,
+                  offer: json.callData.offer
                 });
-                return; // Stop here, no need to push normal text notification
+                return;
               }
             } catch(e) {}
 
@@ -205,7 +206,12 @@ export default function Dashboard() {
               </button>
               <button 
                 onClick={() => {
-                   handleSelectUser({ id: incomingCall.callerId, username: incomingCall.username, incomingCallType: incomingCall.type });
+                   handleSelectUser({ 
+                     id: incomingCall.callerId, 
+                     username: incomingCall.username, 
+                     incomingCallType: incomingCall.type,
+                     offer: incomingCall.offer 
+                   });
                    setIncomingCall(null);
                 }}
                 className="flex-1 py-3 bg-green-500 hover:bg-green-600 text-white shadow-lg shadow-green-500/20 font-bold rounded-2xl flex items-center justify-center gap-2 transition-colors"
