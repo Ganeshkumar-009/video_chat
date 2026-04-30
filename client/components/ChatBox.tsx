@@ -22,6 +22,7 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
   const [replyingTo, setReplyingTo] = useState<any>(null);
   const [swipeOffset, setSwipeOffset] = useState<Record<string, number>>({});
   const [activeCallType, setActiveCallType] = useState<string | null>(recipient.incomingCallType ? `incoming-${recipient.incomingCallType}` : null);
+  const [activeCallOffer, setActiveCallOffer] = useState<any>(recipient.offer || null);
   
   const channelRef = useRef<any>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -110,8 +111,7 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
           
           // Auto-Popup for incoming calls (WhatsApp style)
           if (parsed.callData && parsed.callData.status === 'ringing') {
-             // Pass the offer to the recipient object so CallScreen can use it
-             recipient.offer = parsed.callData.offer;
+             setActiveCallOffer(parsed.callData.offer);
              setActiveCallType(`incoming-${parsed.callData.type}`);
           }
 
@@ -682,12 +682,15 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
 
       {activeCallType && channelRef.current && (
         <CallScreen 
-          recipient={recipient}
+          recipient={{ ...recipient, offer: activeCallOffer }}
           currentUser={currentUser}
           roomId={roomId}
           channel={channelRef.current}
           initialCallType={activeCallType}
-          onEndCall={() => setActiveCallType(null)}
+          onEndCall={() => {
+            setActiveCallType(null);
+            setActiveCallOffer(null);
+          }}
         />
       )}
     </div>
