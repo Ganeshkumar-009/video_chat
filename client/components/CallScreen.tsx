@@ -54,19 +54,25 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
         pc.ontrack = (event) => {
           if (remoteVideoRef.current) {
             remoteVideoRef.current.srcObject = event.streams[0];
-            remoteVideoRef.current.muted = true;
-            remoteVideoRef.current.play().catch(() => {});
+            remoteVideoRef.current.muted = false; // Try to hear it
+            
+            // BRUTE FORCE PLAY LOOP (Kills Giant Play Button)
+            const playInterval = setInterval(() => {
+               if (remoteVideoRef.current && remoteVideoRef.current.paused) {
+                  remoteVideoRef.current.play().catch(() => {
+                     // If blocked, try muted play
+                     if (remoteVideoRef.current) remoteVideoRef.current.muted = true;
+                  });
+               } else {
+                  clearInterval(playInterval);
+               }
+            }, 500);
           }
           setCallStatus('connected');
           if (!callStartTime.current) callStartTime.current = Date.now();
         };
 
-        pc.onicecandidate = (event) => {
-          if (event.candidate) {
-            channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'ice-candidate', room: roomId, candidate: event.candidate } });
-          }
-        };
-
+        // Aggressive Signaling Listener
         const handleBroadcast = async ({ payload }: any) => {
           if (payload.room !== roomId) return;
 
@@ -96,40 +102,52 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
         channel.on('broadcast', { event: 'webrtc' }, handleBroadcast);
         (channel as any)._webrtcHandler = handleBroadcast;
 
+        // VANILLA ICE GATHERING (Most Reliable for Mobile Networks)
+        pc.onicecandidate = (event) => {
+          if (event.candidate) {
+            // Also send individually just in case broadcast works
+            channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'ice-candidate', room: roomId, candidate: event.candidate } });
+          }
+        };
+
         if (isInitiator) {
-          // Create Offer Immediately
           const offer = await pc.createOffer();
           await pc.setLocalDescription(offer);
 
-          const payloadStr = JSON.stringify({
-             text: `📞 ${type === 'video' ? 'Video' : 'Audio'} Call`,
-             callData: { 
-               type, 
-               status: 'ringing', 
-               isVideo: type === 'video',
-               offer: offer // EMBED THE OFFER IN THE DB MESSAGE
-             }
-          });
-          
-          const { data } = await supabase.from('messages').insert([{
-             room_id: roomId,
-             sender_id: currentUser.id,
-             sender_username: currentUser.username,
-             content: encryptMessage(payloadStr, roomId),
-             receiver_id: recipient.id,
-             is_read: false
-          }]).select();
+          // Wait 1 second for ICE gathering to get the best path
+          setTimeout(async () => {
+             const payloadStr = JSON.stringify({
+                text: `📞 ${type === 'video' ? 'Video' : 'Audio'} Call`,
+                callData: { 
+                  type, 
+                  status: 'ringing', 
+                  isVideo: type === 'video',
+                  offer: pc.localDescription // Send the full description with ICE
+                }
+             });
+             
+             const { data } = await supabase.from('messages').insert([{
+                room_id: roomId,
+                sender_id: currentUser.id,
+                sender_username: currentUser.username,
+                content: encryptMessage(payloadStr, roomId),
+                receiver_id: recipient.id,
+                is_read: false
+             }]).select();
 
-          if (data && data.length > 0) {
-             activeMessageId.current = data[0].id;
-          }
+             if (data && data.length > 0) activeMessageId.current = data[0].id;
+          }, 1000);
+
         } else if (recipient.offer) {
-          // RECEIVER: Use the offer from the DB message instantly!
           try {
              await pc.setRemoteDescription(new RTCSessionDescription(recipient.offer));
              const answer = await pc.createAnswer();
              await pc.setLocalDescription(answer);
-             channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'answer', room: roomId, answer } });
+             
+             // Wait for ICE then send Answer
+             setTimeout(() => {
+                channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'answer', room: roomId, answer: pc.localDescription } });
+             }, 800);
           } catch(e) {}
         }
 
@@ -191,12 +209,11 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
   };
 
   return (
-    <div className="absolute inset-0 bg-[#0a0a0b] z-[1000] flex flex-col items-center justify-center overflow-hidden animate-in fade-in zoom-in-95 duration-300" onClick={() => { if (remoteVideoRef.current) remoteVideoRef.current.muted = false; }}>
+    <div className="absolute inset-0 bg-[#0a0a0b] z-[1000] flex flex-col items-center justify-center overflow-hidden animate-in fade-in zoom-in-95 duration-300" onClick={() => { if (remoteVideoRef.current) remoteVideoRef.current.muted = false; remoteVideoRef.current?.play(); }}>
       <video 
         ref={remoteVideoRef} 
         autoPlay 
         playsInline 
-        muted
         className={`w-full h-full object-cover absolute inset-0 ${callStatus !== 'connected' ? 'opacity-0' : 'opacity-100'}`} 
       />
 
