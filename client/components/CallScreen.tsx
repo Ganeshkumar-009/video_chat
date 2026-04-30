@@ -70,6 +70,23 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
         const handleBroadcast = async ({ payload }: any) => {
           if (payload.room !== roomId) return;
 
+          // Handshake Ping-Pong to ensure connection
+          if (payload.type === 'handshake-ping' && !isInitiator && callStatus === 'calling') {
+            if (payload.messageId) activeMessageId.current = payload.messageId;
+            channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'handshake-pong', room: roomId } });
+            return;
+          }
+
+          if (payload.type === 'handshake-pong' && isInitiator && callStatus === 'calling') {
+             try {
+                callStartTime.current = Date.now();
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'offer', room: roomId, offer } });
+             } catch(e) { console.error('Pong offer error:', e); }
+             return;
+          }
+
           if (payload.type === 'offer' && !isInitiator) {
              try {
                 await pc.setRemoteDescription(new RTCSessionDescription(payload.offer));
@@ -77,7 +94,6 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
                 await pc.setLocalDescription(answer);
                 channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'answer', room: roomId, answer } });
                 
-                // Process any candidates that arrived early
                 while (pendingCandidates.current.length > 0) {
                   const candidate = pendingCandidates.current.shift();
                   if (candidate) await pc.addIceCandidate(candidate);
@@ -132,7 +148,7 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
              callData: { type, status: 'ringing', isVideo: type === 'video' }
           });
           
-          const { data, error } = await supabase.from('messages').insert([{
+          const { data } = await supabase.from('messages').insert([{
              room_id: roomId,
              sender_id: currentUser.id,
              sender_username: currentUser.username,
@@ -143,10 +159,14 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
 
           if (data && data.length > 0) {
              activeMessageId.current = data[0].id;
-             // Sync the message ID so both can end the call
-             setTimeout(() => {
-                channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'call-signal', room: roomId, messageId: data[0].id } });
-             }, 1000);
+             // Retry loop to find the other peer
+             const retryInterval = setInterval(() => {
+                if (callStatus === 'connected' || !peerConnection.current) {
+                   clearInterval(retryInterval);
+                   return;
+                }
+                channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'handshake-ping', room: roomId, messageId: data[0].id } });
+             }, 2000);
           }
           
           const { data: userData } = await supabase.from('users').select('fcm_token').eq('id', recipient.id).single();
