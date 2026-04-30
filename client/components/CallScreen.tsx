@@ -16,6 +16,7 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
   const [callStatus, setCallStatus] = useState('calling');  
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(initialCallType === 'audio' || initialCallType === 'incoming-audio');
+  const [log, setLog] = useState('Initializing...');
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const peerConnection = useRef<RTCPeerConnection | null>(null);
@@ -30,12 +31,14 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
 
     const setupMedia = async () => {
       try {
+        setLog('Accessing camera/mic...');
         const stream = await navigator.mediaDevices.getUserMedia({
           video: type === 'video',
           audio: true
         });
         localStream.current = stream;
         if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+        setLog('Media ready. Creating connection...');
 
         const pc = new RTCPeerConnection({
            iceServers: [
@@ -53,10 +56,9 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
         stream.getTracks().forEach(t => pc.addTrack(t, stream));
 
         pc.ontrack = (event) => {
+          setLog('Remote track received!');
           if (remoteVideoRef.current) {
             remoteVideoRef.current.srcObject = event.streams[0];
-            remoteVideoRef.current.muted = true;
-            remoteVideoRef.current.play().catch(() => {});
           }
           setCallStatus('connected');
         };
@@ -75,15 +77,17 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
              if (callStatus === 'connected') return;
              try {
                 if (!pc.localDescription) {
+                   setLog('Peer accepted! Sending offer...');
                    callStartTime.current = Date.now();
                    const offer = await pc.createOffer();
                    await pc.setLocalDescription(offer);
                    channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'offer', room: roomId, offer } });
                 }
-             } catch(e) { console.error('Offer error:', e); }
+             } catch(e) { setLog('Offer error: ' + (e as any).message); }
           }
 
           if (payload.type === 'offer' && !isInitiator) {
+             setLog('Offer received! Sending answer...');
              try {
                 if (pc.signalingState === 'stable' || pc.signalingState === 'have-local-offer') {
                    await pc.setRemoteDescription(new RTCSessionDescription(payload.offer));
@@ -96,15 +100,16 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
                      if (candidate) await pc.addIceCandidate(candidate);
                    }
                 }
-             } catch(e) { console.error('Offer error:', e); }
+             } catch(e) { setLog('Offer processing error: ' + (e as any).message); }
           }
           
           if (payload.type === 'answer' && isInitiator) {
+             setLog('Answer received! Finishing handshake...');
              try {
                 if (pc.signalingState === 'have-local-offer') {
                    await pc.setRemoteDescription(new RTCSessionDescription(payload.answer));
                 }
-             } catch(e) { console.error('Answer error:', e); }
+             } catch(e) { setLog('Answer processing error: ' + (e as any).message); }
           }
 
           if (payload.type === 'ice-candidate') {
@@ -115,7 +120,7 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
                 } else {
                   pendingCandidates.current.push(candidate);
                 }
-             } catch(e) { console.error('ICE error:', e); }
+             } catch(e) {}
           }
 
           if (payload.type === 'call-signal') {
@@ -135,6 +140,7 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
         (channel as any)._webrtcHandler = handleBroadcast;
 
         if (isInitiator) {
+          setLog('Starting call in database...');
           const payloadStr = JSON.stringify({
              text: `📞 ${type === 'video' ? 'Video' : 'Audio'} Call`,
              callData: { type, status: 'ringing', isVideo: type === 'video' }
@@ -153,12 +159,12 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
              activeMessageId.current = data[0].id;
              // Aggressively send messageId to receiver
              const idInterval = setInterval(() => {
-                if (!peerConnection.current || activeMessageId.current === null) {
+                if (!peerConnection.current || callStatus === 'connected' || activeMessageId.current === null) {
                    clearInterval(idInterval);
                    return;
                 }
                 channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'call-signal', room: roomId, messageId: data[0].id } });
-             }, 2000);
+             }, 3000);
           }
           
           const { data: userData } = await supabase.from('users').select('fcm_token').eq('id', recipient.id).single();
@@ -174,6 +180,7 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
             });
           }
         } else {
+          setLog('Waiting for initiator...');
           // Aggressively send Accepted signal until connection starts
           const acceptInterval = setInterval(() => {
              if (callStatus === 'connected' || !peerConnection.current) {
@@ -181,12 +188,12 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
                 return;
              }
              channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'call-signal', room: roomId, signal: 'call-accepted' } });
-          }, 1500);
+          }, 2000);
         }
 
       } catch (err) {
-        console.error("Media Error:", err);
-        endCallLocally();
+        setLog("Setup Error: " + (err as any).message);
+        setTimeout(endCallLocally, 3000);
       }
     };
 
@@ -198,10 +205,7 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
   const endCallLocally = async () => {
     localStream.current?.getTracks().forEach(t => t.stop());
     peerConnection.current?.close();
-    
-    if ((channel as any)._webrtcHandler) {
-      (channel as any)._webrtcHandler = () => {}; 
-    }
+    if ((channel as any)._webrtcHandler) (channel as any)._webrtcHandler = () => {}; 
 
     if (activeMessageId.current) {
        let durationStr = "0s";
@@ -244,8 +248,15 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
     }
   };
 
+  const handleStartAudio = () => {
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.muted = false;
+      remoteVideoRef.current.play().catch(() => {});
+    }
+  };
+
   return (
-    <div className="absolute inset-0 bg-[#0a0a0b] z-[1000] flex flex-col items-center justify-center overflow-hidden animate-in fade-in zoom-in-95 duration-300" onClick={() => { if (remoteVideoRef.current) remoteVideoRef.current.muted = false; }}>
+    <div className="absolute inset-0 bg-[#0a0a0b] z-[1000] flex flex-col items-center justify-center overflow-hidden animate-in fade-in zoom-in-95 duration-300">
       <video 
         ref={remoteVideoRef} 
         autoPlay 
@@ -254,13 +265,27 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
         className={`w-full h-full object-cover absolute inset-0 ${callStatus !== 'connected' ? 'opacity-0' : 'opacity-100'}`} 
       />
 
+      {callStatus === 'connected' && remoteVideoRef.current?.muted !== false && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+           <button 
+             onClick={handleStartAudio}
+             className="px-8 py-4 bg-purple-600 text-white rounded-full font-bold shadow-2xl animate-bounce hover:bg-purple-700 transition-all"
+           >
+              Tap to Start Video & Audio
+           </button>
+        </div>
+      )}
+
       {callStatus !== 'connected' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-[#1a1a1c] to-[#0a0a0b] z-10">
           <div className="w-28 h-28 bg-gradient-to-tr from-purple-600 to-indigo-600 rounded-full flex items-center justify-center font-bold text-white text-5xl shadow-2xl mb-6 ring-8 ring-purple-500/20">
              {recipient.username[0].toUpperCase()}
           </div>
           <h2 className="text-3xl font-bold text-white tracking-wide">{recipient.username}</h2>
-          <p className="text-purple-400 mt-2 font-medium animate-pulse">{callStatus === 'calling' ? 'Calling...' : 'Ringing...'}</p>
+          <p className="text-purple-400 mt-2 font-medium animate-pulse">
+            {callStatus === 'calling' ? 'Calling...' : 'Connecting...'}
+          </p>
+          <div className="mt-8 text-white/40 text-xs font-mono">{log}</div>
         </div>
       )}
 
