@@ -123,6 +123,20 @@ export default function ChatBox({ recipient, currentUser, onBack }: ChatBoxProps
         }
       })
       .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'messages',
+        filter: `room_id=eq.${roomId}`
+      }, (payload) => {
+        const updatedMsg = payload.new;
+        const parsed = parseMessageContent(updatedMsg.content, roomId);
+        setMessages(prev => prev.map(m => m.id === updatedMsg.id ? {
+          ...m,
+          text: parsed.text,
+          callData: parsed.callData
+        } : m));
+      })
+      .on('postgres_changes', {
         event: 'DELETE',
         schema: 'public',
         table: 'messages',
