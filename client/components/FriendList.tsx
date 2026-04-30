@@ -130,22 +130,30 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
         const newMsg = payload.new as any;
         
-        setRecentUsers(prev => prev.map(u => {
-          if (String(u.id) === String(newMsg.sender_id) || String(u.id) === String(newMsg.receiver_id)) {
-            const roomId = [curr.id, u.id].sort().join('--');
-            let decText = decryptMessage(newMsg.content, roomId);
-            try {
-              const json = JSON.parse(decText);
-              if (json.text !== undefined) decText = json.text;
-            } catch(e) {}
-            
-            const preview = (decText.includes('chat-media') || decText.match(/\.(jpeg|jpg|gif|png|webp|mp4|webm|mov)/i)) 
-              ? (decText.match(/\.(mp4|webm|mov)/i) ? '🎥 Video' : '📷 Photo') 
-              : decText;
-            return { ...u, lastMessageText: preview, lastMessageTime: newMsg.created_at };
-          }
-          return u;
-        }));
+        setRecentUsers(prev => {
+          let updated = false;
+          const newPrev = prev.map(u => {
+            if (String(u.id) === String(newMsg.sender_id) || String(u.id) === String(newMsg.receiver_id)) {
+              updated = true;
+              const roomId = [curr.id, u.id].sort().join('--');
+              let decText = decryptMessage(newMsg.content, roomId);
+              try {
+                const json = JSON.parse(decText);
+                if (json.text !== undefined) decText = json.text;
+              } catch(e) {}
+              
+              const preview = (decText.includes('chat-media') || decText.match(/\.(jpeg|jpg|gif|png|webp|mp4|webm|mov)/i)) 
+                ? (decText.match(/\.(mp4|webm|mov)/i) ? '🎥 Video' : '📷 Photo') 
+                : decText;
+              return { ...u, lastMessageText: preview, lastMessageTime: newMsg.created_at };
+            }
+            return u;
+          });
+
+          // Sort by lastMessageTime descending
+          newPrev.sort((a, b) => new Date(b.lastMessageTime).getTime() - new Date(a.lastMessageTime).getTime());
+          return newPrev;
+        });
 
         // If YOU are the receiver, increment unread count
         if (String(newMsg.receiver_id) === String(curr?.id)) {
@@ -155,6 +163,25 @@ export default function FriendList({ onSelectUser, selectedUserId }: FriendListP
             [String(newMsg.sender_id)]: (prev[String(newMsg.sender_id)] || 0) + 1
           }));
         }
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, (payload) => {
+        const updatedMsg = payload.new as any;
+        setRecentUsers(prev => prev.map(u => {
+          if (String(u.id) === String(updatedMsg.sender_id) || String(u.id) === String(updatedMsg.receiver_id)) {
+            const roomId = [curr.id, u.id].sort().join('--');
+            let decText = decryptMessage(updatedMsg.content, roomId);
+            try {
+              const json = JSON.parse(decText);
+              if (json.text !== undefined) decText = json.text;
+            } catch(e) {}
+            
+            const preview = (decText.includes('chat-media') || decText.match(/\.(jpeg|jpg|gif|png|webp|mp4|webm|mov)/i)) 
+              ? (decText.match(/\.(mp4|webm|mov)/i) ? '🎥 Video' : '📷 Photo') 
+              : decText;
+            return { ...u, lastMessageText: preview };
+          }
+          return u;
+        }));
       })
       .subscribe();
 

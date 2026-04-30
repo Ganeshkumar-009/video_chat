@@ -72,6 +72,25 @@ export default function Dashboard() {
             }
           }
         })
+        .on('postgres_changes', { 
+          event: 'UPDATE', 
+          schema: 'public', 
+          table: 'messages'
+        }, (payload) => {
+          const updatedMsg = payload.new;
+          if (String(updatedMsg.receiver_id) === String(parsedUser.id) || String(updatedMsg.sender_id) === String(parsedUser.id)) {
+             const decryptedContent = decryptMessage(updatedMsg.content, updatedMsg.room_id);
+             try {
+                const json = JSON.parse(decryptedContent);
+                if (json.callData && json.callData.status === 'ended') {
+                   setIncomingCall((prev: any) => {
+                      if (prev && prev.room === updatedMsg.room_id) return null;
+                      return prev;
+                   });
+                }
+             } catch(e) {}
+          }
+        })
         .subscribe();
 
       // 3. Expose FCM Token Setter for Flutter

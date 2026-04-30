@@ -16,6 +16,8 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
   const [callStatus, setCallStatus] = useState('calling');  
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(initialCallType === 'audio' || initialCallType === 'incoming-audio');
+  const [isSwapped, setIsSwapped] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(false);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const peerConnection = useRef<RTCPeerConnection | null>(null);
@@ -34,7 +36,10 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
           audio: true
         });
         localStream.current = stream;
-        if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+        if (localVideoRef.current) {
+           localVideoRef.current.srcObject = stream;
+           localVideoRef.current.play().catch(e => console.error("Local play error:", e));
+        }
 
         const pc = new RTCPeerConnection({
            iceServers: [
@@ -52,6 +57,7 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
         pc.ontrack = (event) => {
           if (remoteVideoRef.current) {
             remoteVideoRef.current.srcObject = event.streams[0];
+            remoteVideoRef.current.play().catch(e => console.error("Remote play error:", e));
           }
           setCallStatus('connected');
         };
@@ -204,26 +210,58 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
     }
   };
 
+  if (isMinimized) {
+    return (
+      <div 
+        onClick={() => setIsMinimized(false)}
+        className="fixed top-20 right-4 w-28 h-40 bg-black rounded-xl overflow-hidden shadow-2xl border border-white/20 z-[9999] cursor-pointer hover:ring-2 hover:ring-purple-500 transition-all group"
+      >
+        <video 
+          ref={remoteVideoRef} 
+          autoPlay 
+          playsInline 
+          className="w-full h-full object-cover" 
+        />
+        <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button 
+            onClick={(e) => { e.stopPropagation(); handleHangup(); }} 
+            className="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center text-white shadow-lg"
+          >
+             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/><line x1="22" y1="2" x2="2" y2="22"/></svg>
+          </button>
+        </div>
+        <div className="absolute bottom-2 right-2 w-8 h-12 bg-black rounded overflow-hidden border border-white/20">
+          <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover transform scale-x-[-1]" />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="absolute inset-0 bg-[#0a0a0b] z-[1000] flex flex-col items-center justify-center overflow-hidden animate-in fade-in zoom-in-95 duration-300">
       <video 
         ref={remoteVideoRef} 
         autoPlay 
         playsInline 
-        className={`w-full h-full object-cover absolute inset-0 ${callStatus !== 'connected' ? 'opacity-0' : 'opacity-100'}`} 
+        onClick={() => { if (isSwapped) setIsSwapped(false); }}
+        className={`object-cover transition-all duration-300 ${isSwapped ? 'absolute bottom-32 right-6 w-32 h-44 rounded-2xl shadow-2xl border-2 border-white/10 z-40 cursor-pointer hover:ring-2 hover:ring-white/50' : 'w-full h-full absolute inset-0 z-0'} ${callStatus !== 'connected' ? 'opacity-0' : 'opacity-100'}`} 
       />
 
       {callStatus !== 'connected' && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-[#1a1a1c] to-[#0a0a0b] z-10">
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-[#1a1a1c] to-[#0a0a0b] z-10 pointer-events-none">
           <div className="w-28 h-28 bg-gradient-to-tr from-purple-600 to-indigo-600 rounded-full flex items-center justify-center font-bold text-white text-5xl shadow-2xl mb-6 ring-8 ring-purple-500/20">
              {recipient.username[0].toUpperCase()}
           </div>
           <h2 className="text-3xl font-bold text-white tracking-wide">{recipient.username}</h2>
           <p className="text-purple-400 mt-2 font-medium animate-pulse">{callStatus === 'calling' ? 'Calling...' : 'Ringing...'}</p>
+          <audio src="https://actions.google.com/sounds/v1/alarms/phone_ringing.ogg" autoPlay loop className="hidden" />
         </div>
       )}
 
-      <div className={`absolute bottom-32 right-6 w-32 h-44 bg-black rounded-2xl overflow-hidden shadow-2xl border-2 border-white/10 z-20 transition-all ${isVideoOff ? 'hidden' : 'block'}`}>
+      <div 
+        onClick={() => { if (!isSwapped) setIsSwapped(true); }}
+        className={`transition-all duration-300 overflow-hidden ${isSwapped ? 'w-full h-full absolute inset-0 z-0' : 'absolute bottom-32 right-6 w-32 h-44 rounded-2xl shadow-2xl border-2 border-white/10 z-40 cursor-pointer hover:ring-2 hover:ring-white/50'} ${isVideoOff ? 'hidden' : 'block'}`}
+      >
         <video 
           ref={localVideoRef} 
           autoPlay 
@@ -233,7 +271,7 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
         />
       </div>
 
-      <div className="absolute bottom-0 inset-x-0 h-28 bg-gradient-to-t from-black/80 to-transparent flex items-center justify-center gap-6 z-30 pb-4">
+      <div className="absolute bottom-0 inset-x-0 h-28 bg-gradient-to-t from-black/80 to-transparent flex items-center justify-center gap-6 z-30 pb-4 pointer-events-auto">
          <button onClick={toggleVideo} className={`w-14 h-14 rounded-full flex items-center justify-center backdrop-blur-md transition-colors ${isVideoOff ? 'bg-white text-black' : 'bg-white/20 text-white hover:bg-white/30'}`}>
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.934a.5.5 0 0 0-.777-.416L16 11"/><rect width="14" height="12" x="2" y="6" rx="2"/></svg>
             {isVideoOff && <div className="absolute w-8 h-0.5 bg-black rotate-45" />}
@@ -247,9 +285,9 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
          </button>
       </div>
 
-      <div className="absolute top-0 inset-x-0 h-24 bg-gradient-to-b from-black/80 to-transparent flex items-start p-6 z-30">
-        <button onClick={handleHangup} className="p-2 text-white hover:bg-white/10 rounded-full transition-colors backdrop-blur-md">
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m15 18-6-6 6-6"/></svg>
+      <div className="absolute top-0 inset-x-0 h-24 bg-gradient-to-b from-black/80 to-transparent flex items-start p-6 z-30 pointer-events-auto">
+        <button onClick={() => setIsMinimized(true)} className="p-2 text-white hover:bg-white/10 rounded-full transition-colors backdrop-blur-md" title="Minimize Call">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
         </button>
         <div className="flex-1 text-center pr-10">
            <div className="text-white/80 text-[13px] font-medium flex items-center justify-center gap-1.5 mt-1">
