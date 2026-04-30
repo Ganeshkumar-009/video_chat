@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { encryptMessage } from '@/lib/crypto';
+import { encryptMessage, decryptMessage } from '@/lib/crypto';
 
 interface CallScreenProps {
   recipient: any;
@@ -22,7 +22,6 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
   const localStream = useRef<MediaStream | null>(null);
   const callStartTime = useRef<number | null>(null);
   const activeMessageId = useRef<string | null>(null);
-  const retryCount = useRef(0);
 
   useEffect(() => {
     let isInitiator = !initialCallType.startsWith('incoming');
@@ -41,7 +40,6 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
            iceServers: [
              { urls: 'stun:stun.l.google.com:19302' },
              { urls: 'stun:stun1.l.google.com:19302' },
-             { urls: 'stun:stun2.l.google.com:19302' },
              {
                urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443?transport=tcp'],
                username: 'openrelayproject',
@@ -56,15 +54,10 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
         pc.ontrack = (event) => {
           if (remoteVideoRef.current) {
             remoteVideoRef.current.srcObject = event.streams[0];
-            // WhatsApp-style Force Play
-            const forcePlay = setInterval(() => {
-               if (!remoteVideoRef.current) { clearInterval(forcePlay); return; }
-               remoteVideoRef.current.play().then(() => {
-                  clearInterval(forcePlay);
-                  setCallStatus('connected');
-               }).catch(() => {});
-            }, 100);
+            remoteVideoRef.current.muted = true;
+            remoteVideoRef.current.play().catch(() => {});
           }
+          setCallStatus('connected');
         };
 
         pc.onicecandidate = (event) => {
@@ -73,38 +66,26 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
           }
         };
 
+        // Aggressive Broadcast + Realtime listener
         const handleBroadcast = async ({ payload }: any) => {
           if (payload.room !== roomId) return;
 
-          // Heartbeat Handshake
-          if (payload.type === 'heartbeat' && !isInitiator && callStatus === 'calling') {
-            if (payload.messageId) activeMessageId.current = payload.messageId;
-            channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'heartbeat-ack', room: roomId } });
-          }
-
-          if (payload.type === 'heartbeat-ack' && isInitiator && callStatus === 'calling') {
-             if (pc.signalingState === 'stable') {
-                try {
-                   callStartTime.current = Date.now();
-                   const offer = await pc.createOffer();
-                   await pc.setLocalDescription(offer);
-                   channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'offer', room: roomId, offer } });
-                } catch(e) {}
-             }
-          }
-
           if (payload.type === 'offer' && !isInitiator) {
              try {
-                await pc.setRemoteDescription(new RTCSessionDescription(payload.offer));
-                const answer = await pc.createAnswer();
-                await pc.setLocalDescription(answer);
-                channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'answer', room: roomId, answer } });
+                if (pc.signalingState === 'stable') {
+                   await pc.setRemoteDescription(new RTCSessionDescription(payload.offer));
+                   const answer = await pc.createAnswer();
+                   await pc.setLocalDescription(answer);
+                   channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'answer', room: roomId, answer } });
+                }
              } catch(e) {}
           }
           
           if (payload.type === 'answer' && isInitiator) {
              try {
-                await pc.setRemoteDescription(new RTCSessionDescription(payload.answer));
+                if (pc.signalingState === 'have-local-offer') {
+                   await pc.setRemoteDescription(new RTCSessionDescription(payload.answer));
+                }
              } catch(e) {}
           }
 
@@ -117,14 +98,35 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
           }
 
           if (payload.type === 'call-signal') {
+             if (payload.signal === 'call-accepted' && isInitiator) {
+                if (pc.signalingState === 'stable') {
+                   callStartTime.current = Date.now();
+                   const offer = await pc.createOffer();
+                   await pc.setLocalDescription(offer);
+                   channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'offer', room: roomId, offer } });
+                }
+             }
              if (payload.signal === 'call-ended') {
                 endCallLocally();
+             }
+             if (payload.messageId && !isInitiator) {
+                activeMessageId.current = payload.messageId;
              }
           }
         };
 
         channel.on('broadcast', { event: 'webrtc' }, handleBroadcast);
         (channel as any)._webrtcHandler = handleBroadcast;
+
+        // DB-Sync Listener for reliability
+        const dbChannel = supabase.channel(`db-sync-${roomId}`)
+          .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `room_id=eq.${roomId}` }, (payload) => {
+             const msg = payload.new;
+             const parsed = JSON.parse(decryptMessage(msg.content, roomId));
+             if (parsed.callData?.status === 'ended') {
+                endCallLocally();
+             }
+          }).subscribe();
 
         if (isInitiator) {
           const payloadStr = JSON.stringify({
@@ -143,16 +145,26 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
 
           if (data && data.length > 0) {
              activeMessageId.current = data[0].id;
-             // Start Heartbeat
+             // Heartbeat to find the peer
              const heartInterval = setInterval(() => {
                 if (callStatus === 'connected' || !peerConnection.current) {
                    clearInterval(heartInterval);
                    return;
                 }
-                channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'heartbeat', room: roomId, messageId: data[0].id } });
+                channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'call-signal', room: roomId, messageId: data[0].id, signal: 'ping' } });
              }, 1000);
           }
+        } else {
+          callStartTime.current = Date.now();
+          const acceptInterval = setInterval(() => {
+             if (callStatus === 'connected' || !peerConnection.current) {
+                clearInterval(acceptInterval);
+                return;
+             }
+             channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'call-signal', room: roomId, signal: 'call-accepted' } });
+          }, 1000);
         }
+
       } catch (err) {
         console.error("Media Error:", err);
         endCallLocally();
