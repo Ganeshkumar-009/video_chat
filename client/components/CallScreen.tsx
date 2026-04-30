@@ -45,9 +45,11 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
            iceServers: [
              { urls: 'stun:stun.l.google.com:19302' },
              { urls: 'stun:stun1.l.google.com:19302' },
-             { urls: 'stun:stun2.l.google.com:19302' },
-             { urls: 'stun:stun3.l.google.com:19302' },
-             { urls: 'stun:stun4.l.google.com:19302' },
+             {
+               urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443?transport=tcp'],
+               username: 'openrelayproject',
+               credential: 'openrelayproject'
+             }
            ]
         });
         peerConnection.current = pc;
@@ -107,6 +109,9 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
              if (payload.signal === 'call-ended') {
                 endCallLocally();
              }
+             if (payload.messageId && !isInitiator) {
+                activeMessageId.current = payload.messageId;
+             }
           }
         };
 
@@ -130,6 +135,10 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
 
           if (data && data.length > 0) {
              activeMessageId.current = data[0].id;
+             // Send the messageId to the receiver so they can also end the call
+             setTimeout(() => {
+                channel.send({ type: 'broadcast', event: 'webrtc', payload: { type: 'call-signal', room: roomId, messageId: data[0].id } });
+             }, 1000);
           }
           
           const { data: userData } = await supabase.from('users').select('fcm_token').eq('id', recipient.id).single();
@@ -169,7 +178,7 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
       (channel as any)._webrtcHandler = () => {}; 
     }
 
-    // Update DB with duration if initiator
+    // Update DB with duration (Whichever side hangs up first)
     if (activeMessageId.current) {
        let durationStr = "0s";
        if (callStartTime.current) {
@@ -186,6 +195,9 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
        await supabase.from('messages').update({
           content: encryptMessage(endPayloadStr, roomId)
        }).eq('id', activeMessageId.current);
+       
+       // Clear it so we don't update twice
+       activeMessageId.current = null;
     }
 
     onEndCall();
@@ -238,11 +250,12 @@ export default function CallScreen({ recipient, currentUser, roomId, channel, in
   }
 
   return (
-    <div className="absolute inset-0 bg-[#0a0a0b] z-[1000] flex flex-col items-center justify-center overflow-hidden animate-in fade-in zoom-in-95 duration-300">
+    <div className="absolute inset-0 bg-[#0a0a0b] z-[1000] flex flex-col items-center justify-center overflow-hidden animate-in fade-in zoom-in-95 duration-300" onClick={() => { if (remoteVideoRef.current) remoteVideoRef.current.muted = false; }}>
       <video 
         ref={remoteVideoRef} 
         autoPlay 
         playsInline 
+        muted
         onClick={() => { if (isSwapped) setIsSwapped(false); }}
         className={`object-cover transition-all duration-300 ${isSwapped ? 'absolute bottom-32 right-6 w-32 h-44 rounded-2xl shadow-2xl border-2 border-white/10 z-40 cursor-pointer hover:ring-2 hover:ring-white/50' : 'w-full h-full absolute inset-0 z-0'} ${callStatus !== 'connected' ? 'opacity-0' : 'opacity-100'}`} 
       />
